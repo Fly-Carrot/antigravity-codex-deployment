@@ -1,0 +1,68 @@
+version: 1
+global_root: "{{ AGF_GLOBAL_ROOT }}"
+shared_receipt_log: "{{ AGF_GLOBAL_ROOT }}/sync/receipts.ndjson"
+runtimes:
+  antigravity:
+    global_rule_source: "{{ AGF_GEMINI_RULE }}"
+    mcp_source: "{{ AGF_ANTIGRAVITY_MCP_CONFIG }}"
+    skills_root: "{{ AGF_AWESOME_SKILLS_ROOT }}/skills"
+    bootstrap_order:
+      - "{{ AGF_GLOBAL_ROOT }}/README.md"
+      - "{{ AGF_GLOBAL_ROOT }}/rules/global/gemini-global.md"
+      - "{{ AGF_GLOBAL_ROOT }}/projects/registry.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/mcp/servers.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/skills/sources.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/workflows/sources.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/memory/routes.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/memory/schema.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/sync/hook-policy.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/sync/boot-sequence.md"
+    write_routes:
+      shared_logs_root: "{{ AGF_GLOBAL_ROOT }}/memory"
+      stable_technical_route:
+        mechanism: "cc-skill-continuous-learning"
+        bridge: "{{ AGF_GLOBAL_ROOT }}/memory/ki-registry.yaml"
+      episodic_detail:
+        mechanism: "mempalace"
+        bridge: "{{ AGF_GLOBAL_ROOT }}/memory/mempalace-taxonomy.yaml"
+    hook_contract:
+      session_start:
+        - "{{ AGF_GLOBAL_ROOT }}/scripts/sync/preflight_check.py"
+        - "{{ AGF_GLOBAL_ROOT }}/scripts/sync/sync_all.py"
+      session_end:
+        - "{{ AGF_GLOBAL_ROOT }}/scripts/sync/postflight_sync.py"
+      required_chat_markers:
+        - "[BOOT_OK]"
+        - "[SYNC_OK]"
+  codex:
+    preferred_bootstrap_order:
+      - "{{ AGF_GLOBAL_ROOT }}/README.md"
+      - "{{ AGF_GLOBAL_ROOT }}/rules/global/gemini-global.md"
+      - "{{ AGF_GLOBAL_ROOT }}/projects/registry.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/mcp/servers.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/skills/sources.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/workflows/sources.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/memory/routes.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/memory/schema.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/sync/hook-policy.yaml"
+      - "{{ AGF_GLOBAL_ROOT }}/sync/boot-sequence.md"
+    write_routes:
+      shared_logs_root: "{{ AGF_GLOBAL_ROOT }}/memory"
+      stable_technical_route:
+        mechanism: "cc-skill-continuous-learning"
+        bridge: "{{ AGF_GLOBAL_ROOT }}/memory/ki-registry.yaml"
+      episodic_detail:
+        mechanism: "mempalace"
+        bridge: "{{ AGF_GLOBAL_ROOT }}/memory/mempalace-taxonomy.yaml"
+    hook_contract:
+      session_start:
+        - "{{ AGF_GLOBAL_ROOT }}/scripts/sync/preflight_check.py"
+        - "{{ AGF_GLOBAL_ROOT }}/scripts/sync/sync_all.py"
+      session_end:
+        - "{{ AGF_GLOBAL_ROOT }}/scripts/sync/postflight_sync.py"
+      required_chat_markers:
+        - "[BOOT_OK]"
+        - "[SYNC_OK]"
+project_overlay_policy:
+  mode: "read_existing_overlay_only"
+  project_registry: "{{ AGF_GLOBAL_ROOT }}/projects/registry.yaml"

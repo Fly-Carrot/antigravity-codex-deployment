@@ -1,0 +1,37 @@
+version: 1
+projects:
+  - id: "mcp-hub"
+    name: "MCP_Hub"
+    path: "{{ AGF_PROJECT_MCP_HUB }}"
+    overlay_rules: []
+    overlay_root: "{{ AGF_PROJECT_MCP_HUB }}/.agents"
+  - id: "project3.5"
+    name: "Project3.5"
+    path: "{{ AGF_PROJECT_3_5 }}"
+    overlay_rules:
+      - "{{ AGF_PROJECT_3_5 }}/.agents/rules/ecology.md"
+    overlay_root: "{{ AGF_PROJECT_3_5 }}/.agents"
+  - id: "project4"
+    name: "Project4"
+    path: "{{ AGF_PROJECT_4 }}"
+    overlay_rules:
+      - "{{ AGF_PROJECT_4 }}/.agents/rules/ecology.md"
+    overlay_root: "{{ AGF_PROJECT_4 }}/.agents"
+  - id: "project5"
+    name: "Project5"
+    path: "{{ AGF_PROJECT_5 }}"
+    overlay_rules:
+      - "{{ AGF_PROJECT_5 }}/.agents/rules/ecology.md"
+    overlay_root: "{{ AGF_PROJECT_5 }}/.agents"
+  - id: "project5.5"
+    name: "Project 5.5"
+    path: "{{ AGF_PROJECT_5_5 }}"
+    overlay_rules:
+      - "{{ AGF_PROJECT_5_5 }}/.agents/rules/ecology.md"
+    overlay_root: "{{ AGF_PROJECT_5_5 }}/.agents"
+  - id: "project-design"
+    name: "Project Design"
+    path: "{{ AGF_PROJECT_DESIGN }}"
+    overlay_rules:
+      - "{{ AGF_PROJECT_DESIGN }}/.agents/rules/design.md"
+    overlay_root: "{{ AGF_PROJECT_DESIGN }}/.agents"

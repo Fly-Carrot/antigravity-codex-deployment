@@ -1,0 +1,49 @@
+version: 1
+policy_name: "global-agent-fabric-hook-policy"
+goal: "Ensure Antigravity and Codex bootstrap from the same shared state and write back through the same shared protocols."
+shared_scripts:
+  preflight_check: "{{ AGF_GLOBAL_ROOT }}/scripts/sync/preflight_check.py"
+  sync_all: "{{ AGF_GLOBAL_ROOT }}/scripts/sync/sync_all.py"
+  postflight_sync: "{{ AGF_GLOBAL_ROOT }}/scripts/sync/postflight_sync.py"
+shared_receipt_log: "{{ AGF_GLOBAL_ROOT }}/sync/receipts.ndjson"
+hook_points:
+  session_start:
+    required:
+      - "Run preflight_check.py"
+      - "Run sync_all.py before substantial work"
+      - "Emit a session_start receipt with status_marker [BOOT_OK] on success"
+    purpose:
+      - "Validate global root integrity"
+      - "Identify current project overlay"
+      - "Load latest shared memory, MCP, workflow, and rule state"
+  task_boundary:
+    recommended:
+      - "Call postflight_sync.py when a major task phase completes"
+    purpose:
+      - "Persist decision/open-loop/handoff deltas at meaningful boundaries"
+  session_end:
+    required:
+      - "Call postflight_sync.py with a structured summary"
+      - "Emit a session_end receipt with status_marker [SYNC_OK] on success"
+    purpose:
+      - "Guarantee the next runtime sees continuation state"
+runtimes:
+  antigravity:
+    integration_mode: "runtime-native hooks or workflow wrappers"
+    minimum_contract:
+      - "session_start -> preflight_check + sync_all"
+      - "session_end -> postflight_sync"
+      - "Echo [BOOT_OK] / [SYNC_OK] in chat when the corresponding receipt is written"
+  codex:
+    integration_mode: "session wrapper or manual standardized pre/post commands"
+    minimum_contract:
+      - "session_start -> preflight_check + sync_all"
+      - "session_end -> postflight_sync"
+      - "Echo [BOOT_OK] / [SYNC_OK] in chat when the corresponding receipt is written"
+failure_policy:
+  preflight:
+    severity: "blocking"
+    rule: "If global root, project registry, or memory schema is unreadable, stop and repair before substantive work."
+  postflight:
+    severity: "warning"
+    rule: "If write-back fails, surface the failure explicitly and do not pretend synchronization completed."

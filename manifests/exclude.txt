@@ -1,0 +1,9 @@
+# Never commit or package these as framework artifacts
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/global-agent-fabric_venv/
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/sync/receipts.ndjson
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/sync/import-state.json
+/Users/david_chen/.gemini/
+/Users/david_chen/.codex/
+/Users/david_chen/Library/Application Support/Antigravity/
+/Users/david_chen/Desktop/MCP_Hub/MCP_Hub_venv/
+/Users/david_chen/Desktop/MCP_Hub/mempalace_venv/

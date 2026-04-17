@@ -1,0 +1,11 @@
+# Stateful shared assets to export and restore separately
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/decision-log.ndjson
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/open-loops.ndjson
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/handoffs.ndjson
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/workflows/imported/
+/Users/david_chen/Desktop/MCP_Hub/.agents/
+/Users/david_chen/Desktop/Project3.5/.agents/
+/Users/david_chen/Desktop/Project4/.agents/
+/Users/david_chen/Desktop/Project5/.agents/
+/Users/david_chen/Desktop/Project 5.5/.agents/
+/Users/david_chen/Desktop/Project Design/.agents/

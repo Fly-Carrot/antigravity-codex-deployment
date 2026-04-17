@@ -1,0 +1,36 @@
+version: 1
+
+# Fill these values during installation for the target machine.
+paths:
+  user_home: "/Users/your_username"
+  desktop_root: "/Users/your_username/Desktop"
+
+  global_root: "/Users/your_username/Antigravity_Skills/global-agent-fabric"
+  awesome_skills_root: "/Users/your_username/Antigravity_Skills/awesome-skills"
+
+  gemini_root: "/Users/your_username/.gemini"
+  gemini_rule: "/Users/your_username/.gemini/GEMINI.md"
+  antigravity_mcp_config: "/Users/your_username/.gemini/antigravity/mcp_config.json"
+  antigravity_brain_root: "/Users/your_username/.gemini/antigravity/brain"
+  antigravity_history_root: "/Users/your_username/Library/Application Support/Antigravity/User/History"
+
+  codex_root: "/Users/your_username/.codex"
+
+  project_roots:
+    mcp_hub: "/Users/your_username/Desktop/MCP_Hub"
+    project3_5: "/Users/your_username/Desktop/Project3.5"
+    project4: "/Users/your_username/Desktop/Project4"
+    project5: "/Users/your_username/Desktop/Project5"
+    project5_5: "/Users/your_username/Desktop/Project 5.5"
+    project_design: "/Users/your_username/Desktop/Project Design"
+
+derived:
+  receipts_log: "{paths.global_root}/sync/receipts.ndjson"
+  import_state_file: "{paths.global_root}/sync/import-state.json"
+  shared_memory_root: "{paths.global_root}/memory"
+  workflow_import_root: "{paths.global_root}/workflows/imported"
+
+notes:
+  - "Install scripts should render a concrete paths.yaml from this template."
+  - "Python sync scripts should read the rendered config before falling back to CLI flags."
+  - "Project registries should be generated from project_roots rather than committed with one machine's absolute paths."

@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Local install outputs
+install/.env.local
+install/paths.yaml
+
+# Exported state bundles
+*.tar.gz
+*.tar
+*.tgz
+*.zip
+*.age
+
+# Local scratch files
+*.tmp
