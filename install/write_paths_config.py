@@ -18,6 +18,7 @@ def render_paths(values: dict[str, str]) -> str:
     global_root = require(values, "AGF_GLOBAL_ROOT")
     awesome_skills_root = require(values, "AGF_AWESOME_SKILLS_ROOT")
     gemini_root = require(values, "AGF_GEMINI_ROOT")
+    gemini_settings = require(values, "AGF_GEMINI_SETTINGS")
     gemini_rule = require(values, "AGF_GEMINI_RULE")
     antigravity_mcp_config = require(values, "AGF_ANTIGRAVITY_MCP_CONFIG")
     antigravity_brain_root = require(values, "AGF_ANTIGRAVITY_BRAIN_ROOT")
@@ -41,6 +42,7 @@ def render_paths(values: dict[str, str]) -> str:
         f"  awesome_skills_root: {yaml_quote(awesome_skills_root)}",
         "",
         f"  gemini_root: {yaml_quote(gemini_root)}",
+        f"  gemini_settings: {yaml_quote(gemini_settings)}",
         f"  gemini_rule: {yaml_quote(gemini_rule)}",
         f"  antigravity_mcp_config: {yaml_quote(antigravity_mcp_config)}",
         f"  antigravity_brain_root: {yaml_quote(antigravity_brain_root)}",

@@ -9,6 +9,7 @@ paths:
   awesome_skills_root: "/Users/your_username/Antigravity_Skills/awesome-skills"
 
   gemini_root: "/Users/your_username/.gemini"
+  gemini_settings: "/Users/your_username/.gemini/settings.json"
   gemini_rule: "/Users/your_username/.gemini/GEMINI.md"
   antigravity_mcp_config: "/Users/your_username/.gemini/antigravity/mcp_config.json"
   antigravity_brain_root: "/Users/your_username/.gemini/antigravity/brain"

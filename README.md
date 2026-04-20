@@ -28,8 +28,20 @@ antigravity-codex-deployment/
   README.md
   .gitignore
   docs/
+    releases/
+      v2.0.0.md
+    gemini-cli-shared-kb-v1.md
     portable-deployment-plan.md
     path-migration-checklist.md
+  fabric/
+    mcp/
+      servers.yaml
+      secrets.example.yaml
+    scripts/
+      sync/
+        path_config.py
+        bootstrap_gemini_workspace.py
+        log_task_phase.py
   install/
     env.template
     paths.template.yaml
@@ -47,7 +59,26 @@ antigravity-codex-deployment/
     framework-include.txt
     state-include.txt
     exclude.txt
+  tools/
+    compact_dashboard/
+    compact_dashboard_desktop/
 ```
+
+## 2.0 当前发布内容
+
+`v2.0` 这一版已经把“共享框架 2.0 基线”整理进仓库，重点包含：
+
+- Gemini CLI shared-knowledge-base 接入方案与一键 bootstrap 源码
+- shared fabric 精确六阶段 phase logger 源码
+- `compact dashboard v2` 终端监控面板
+- macOS 原生浮窗源码与 app build 脚本
+- 路径模板化、安装、导出、恢复、doctor 检查链
+
+这意味着这个仓库现在不只是“部署设计稿”，而是：
+
+- 部署控制面
+- shared-fabric 关键扩展源码快照
+- dashboard pilot 工具源码
 
 ## 这套仓库能做什么
 
@@ -111,6 +142,7 @@ cp install/env.template install/.env.local
 - `AGF_FRAMEWORK_SOURCE_ROOT`
 - `AGF_GLOBAL_ROOT`
 - `AGF_AWESOME_SKILLS_ROOT`
+- `AGF_GEMINI_SETTINGS`
 - `AGF_GEMINI_RULE`
 - `AGF_ANTIGRAVITY_MCP_CONFIG`
 - `AGF_PROJECT_MCP_HUB`
@@ -157,6 +189,58 @@ zsh install/install_everything.sh install/.env.local install/paths.yaml ./state-
 - 共享记忆
 - workflow snapshots
 - 项目 `.agents` overlay
+
+
+## Gemini CLI 一键接入
+
+首轮 Gemini A+B 落地提供一个 shared-fabric 侧的一键入口：
+
+```bash
+python3 /Users/david_chen/Antigravity_Skills/global-agent-fabric/scripts/sync/bootstrap_gemini_workspace.py \
+  --workspace /Users/david_chen/Desktop/MCP_Hub
+```
+
+这条命令会：
+
+- 合并 `~/.gemini/settings.json`，确保 `AGENTS.md` / `GEMINI.md` 会被 Gemini CLI 识别
+- 从 `global-agent-fabric/mcp/servers.yaml` 渲染 Gemini `mcpServers`
+- 在目标项目根目录生成一个很薄的 `AGENTS.md` 入口文件
+
+注意：
+
+- Gemini MCP 渲染优先读取 `global-agent-fabric/mcp/secrets.yaml`
+- 如果该文件不存在，请先从 `global-agent-fabric/mcp/secrets.example.yaml` 复制并填写本机密钥
+- 首轮只在 `MCP_Hub` 试点验证，但脚本本身面向任何已注册项目目录
+
+仓库里也保留了一份 2.0 发布时的 shared-fabric 侧源码快照，方便后续迁移与对照：
+
+- `fabric/scripts/sync/bootstrap_gemini_workspace.py`
+- `fabric/scripts/sync/log_task_phase.py`
+- `fabric/scripts/sync/path_config.py`
+- `fabric/mcp/servers.yaml`
+- `fabric/mcp/secrets.example.yaml`
+
+这些文件的定位是“发布快照与迁移参考”，不是你的线上 receipts 或本机 secrets。
+
+## Compact Dashboard v2
+
+仓库已经包含 dashboard pilot 工具源码：
+
+- `tools/compact_dashboard/`
+- `tools/compact_dashboard_desktop/`
+
+它们提供：
+
+- 终端版紧凑监控窗口
+- 精确/启发式六阶段条
+- snapshot 导出器
+- macOS 原生浮窗源码
+- `MCP Hub Dashboard.app` 的构建脚本
+
+详细说明请看：
+
+- `tools/compact_dashboard/README.md`
+- `docs/releases/v2.0.0.md`
 
 ## 常用脚本说明
 

@@ -18,3 +18,6 @@ install/paths.yaml
 
 # Local scratch files
 *.tmp
+
+# Built dashboard app bundle
+tools/compact_dashboard_desktop/MCP Hub Dashboard.app/

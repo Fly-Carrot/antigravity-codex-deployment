@@ -1,0 +1,84 @@
+version: 1
+servers:
+  -
+    id: "chrome-devtools"
+    enabled: true
+    command: "/opt/homebrew/bin/npx"
+    args:
+      - "-y"
+      - "chrome-devtools-mcp@latest"
+      - "--browser-url=http://127.0.0.1:9222"
+    env_refs:
+      - "PATH"
+    owner: "global"
+    scope: "browser-automation"
+    source: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml"
+  -
+    id: "context7"
+    enabled: true
+    command: "/opt/homebrew/bin/npx"
+    args:
+      - "-y"
+      - "@upstash/context7-mcp"
+      - "--api-key"
+      - "${CONTEXT7_API_KEY}"
+    env_refs:
+      - "PATH"
+      - "CONTEXT7_API_KEY"
+    owner: "global"
+    scope: "docs"
+    source: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml"
+  -
+    id: "markitdown"
+    enabled: true
+    command: "/Users/david_chen/Desktop/MCP_Hub/MCP_Hub_venv/bin/markitdown-mcp"
+    args: []
+    env_refs: []
+    owner: "global"
+    scope: "document-conversion"
+    source: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml"
+  -
+    id: "mempalace"
+    enabled: true
+    command: "/Users/david_chen/Desktop/MCP_Hub/mempalace_venv/bin/python"
+    args:
+      - "-m"
+      - "mempalace.mcp_server"
+    env_refs: []
+    owner: "global"
+    scope: "memory"
+    source: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml"
+  -
+    id: "notebooklm"
+    enabled: true
+    command: "/Users/david_chen/Desktop/MCP_Hub/MCP_Hub_venv/bin/notebooklm-mcp"
+    args: []
+    env_refs: []
+    owner: "global"
+    scope: "research"
+    source: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml"
+  -
+    id: "qgis"
+    enabled: false
+    command: "/Users/david_chen/.local/bin/uv"
+    args:
+      - "--directory"
+      - "/Users/david_chen/Desktop/MCP_Hub/qgis_mcp/src/qgis_mcp"
+      - "run"
+      - "qgis_mcp_server.py"
+    env_refs:
+      - "PATH"
+    owner: "global"
+    scope: "gis"
+    source: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml"
+  -
+    id: "zotero"
+    enabled: true
+    command: "/Users/david_chen/Desktop/MCP_Hub/MCP_Hub_venv/bin/zotero-mcp"
+    args: []
+    env_refs:
+      - "ZOTERO_API_KEY"
+      - "ZOTERO_LIBRARY_ID"
+    owner: "global"
+    scope: "literature"
+    source: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml"
