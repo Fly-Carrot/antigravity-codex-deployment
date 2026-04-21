@@ -1,47 +1,44 @@
 # Shared Fabric Dashboard
 
-Shared Fabric Dashboard is a setup-first deployment repo for a shared agent fabric built around Codex, Gemini, canonical memory lanes, exact six-stage task phases, and a macOS desktop dashboard.
+Shared Fabric Dashboard is a setup-first control plane for running Codex and Gemini against one canonical shared fabric.
 
-This repository is designed to help you do three things well:
+It gives you a clean way to bootstrap a reusable storage root, inject workspace rules into VSCode, and observe sync, task phases, and project memory from a terminal dashboard or a native macOS app.
 
-1. bootstrap a reusable shared-fabric storage root on a new machine
-2. enable any workspace with a thin `AGENTS.md` bridge plus VSCode task entrypoints
-3. observe task state, sync deltas, and project memory through terminal and desktop dashboards
+[Download v3.0.0](https://github.com/Fly-Carrot/antigravity-codex-deployment/releases/tag/v3.0.0) · [Release Notes](docs/releases/v3.0.0.md) · [Desktop App Source](tools/compact_dashboard_desktop/)
 
-## What This Repo Contains
+![Shared Fabric Dashboard desktop app](docs/assets/dashboard-app-window.png)
 
-This repo is not the live shared-fabric state itself. It is the portable control plane for standing that system up elsewhere.
+## What You Get
 
-It includes:
+| Capability | What it does | Main entrypoint |
+| --- | --- | --- |
+| Storage bootstrap | Creates a new canonical shared-fabric root on a new machine | `python3 install/bootstrap_shared_fabric.py` |
+| Workspace enablement | Injects `AGENTS.md` plus VSCode tasks into any project workspace | `python3 install/bootstrap_vscode_workspace.py` |
+| Exact task tracking | Mirrors `route -> plan -> review -> dispatch -> execute -> report` across the dashboards | `fabric/scripts/sync/log_task_phase.py` |
+| Rich memory lanes | Expands sync writes into `Decision`, `Handoff`, `Mem`, `Loop`, `Learn`, and `Receipt` records | `fabric/scripts/sync/postflight_sync.py` |
+| macOS dashboard | Workspace switcher, settings, sync drill-down, project memory browser, setup assistant | `tools/compact_dashboard_desktop/` |
 
-- installation and doctor scripts
-- shared-fabric config templates
-- sync and postflight tooling
-- rich memory expansion and backfill tooling
-- a compact terminal dashboard
-- a native macOS desktop dashboard app
-- workspace bootstrap entrypoints for Codex and Gemini
+## Why This Repo Exists
 
-## Core Product Shape
+This repository is not your live memory store.
 
-The current product direction is setup-first.
+It is the portable deployment snapshot for standing up the same shared-fabric system on another machine without copying private local state. The canonical runtime state still lives in the shared fabric root you choose during bootstrap.
 
-That means the main entrypoints are:
+## Product Shape
 
-- `install/bootstrap_shared_fabric.py`
-  Creates the shared storage root, local path config, framework skeleton, and doctor-checked install chain.
-- `install/bootstrap_vscode_workspace.py`
-  Enables a workspace by generating `AGENTS.md`, `.vscode/tasks.json`, and the Gemini compatibility bridge.
-- `tools/compact_dashboard/`
-  Terminal snapshot and monitoring surface.
-- `tools/compact_dashboard_desktop/`
-  macOS desktop app with workspace switching, settings, sync drill-down, project memory browsing, and setup assistance.
+```mermaid
+flowchart LR
+    A["New machine or new workspace"] --> B["Bootstrap shared fabric root"]
+    B --> C["Enable workspace with AGENTS.md + VSCode tasks"]
+    C --> D["Run Codex or Gemini in the workspace"]
+    D --> E["Boot + phase logging + postflight sync"]
+    E --> F["Canonical memory lanes in global-agent-fabric"]
+    F --> G["Terminal dashboard + macOS dashboard"]
+```
 
-## Major Capabilities
+## Setup In Two Steps
 
-### 1. Shared-Fabric Storage Bootstrap
-
-Use the storage bootstrap to stand up a new canonical shared-fabric root:
+### 1. Create the shared storage root
 
 ```bash
 python3 install/bootstrap_shared_fabric.py
@@ -56,110 +53,7 @@ python3 install/bootstrap_shared_fabric.py \
   --desktop-root /path/to/Desktop
 ```
 
-This bootstrap:
-
-- creates the shared directory skeleton
-- renders local config files
-- installs the framework snapshot into the chosen global root
-- prepares Gemini/Codex-compatible paths
-- runs the doctor chain after installation
-
-### 2. Workspace-First VSCode Enablement
-
-Enable a workspace for shared-fabric usage with:
-
-```bash
-python3 install/bootstrap_vscode_workspace.py \
-  --workspace /path/to/workspace \
-  --global-root /path/to/global-agent-fabric \
-  --runtimes both
-```
-
-This writes:
-
-- project-root `AGENTS.md`
-- `.vscode/tasks.json`
-- Gemini `settings.json` compatibility updates when Gemini is included
-
-The generated VSCode tasks expose:
-
-- `Shared Fabric: Boot Current Workspace`
-- `Shared Fabric: Sync Current Workspace`
-- `Shared Fabric: Postflight Sync`
-- `Shared Fabric: Open Global Root`
-- `Shared Fabric: Rebuild Workspace Entry`
-
-The integration model is intentionally workspace-first rather than a custom VSCode extension. The durable source of truth stays in:
-
-- project `AGENTS.md`
-- canonical shared-fabric scripts
-- shared memory lane files
-
-### 3. Exact Task Observability
-
-The shared fabric supports exact six-stage task tracking:
-
-- `route`
-- `plan`
-- `review`
-- `dispatch`
-- `execute`
-- `report`
-
-These phases are written through the canonical logger and can be observed from the dashboard surfaces.
-
-### 4. Rich Memory Architecture
-
-The shared fabric keeps one canonical memory family, expanded into rich structured bundles across:
-
-- `Decision`
-- `Handoff`
-- `Mem`
-- `Loop`
-- `Learn`
-- `Receipt`
-
-The desktop dashboard now exposes project memory as a real browser rather than only a latest-sync audit surface.
-
-### 5. macOS Dashboard App
-
-The desktop app includes:
-
-- app menu, file menu, view menu, and standard window behavior
-- workspace switching with auto-follow and pinned modes
-- settings persistence through `UserDefaults`
-- project memory browsing with drill-down details
-- sync delta inspection with clickable records
-- setup assistant for storage-root bootstrap and workspace bootstrap
-
-## Repository Layout
-
-```text
-antigravity-codex-deployment/
-  README.md
-  docs/
-    releases/
-  fabric/
-    memory/
-    mcp/
-    scripts/
-      sync/
-    sync/
-  install/
-  manifests/
-  tests/
-  tools/
-    compact_dashboard/
-    compact_dashboard_desktop/
-```
-
-## Quick Start
-
-### 1. Bootstrap the shared storage root
-
-```bash
-python3 install/bootstrap_shared_fabric.py
-```
+This step creates the shared directory skeleton, renders local config, installs the framework snapshot, and runs the doctor chain.
 
 ### 2. Enable a workspace
 
@@ -170,30 +64,75 @@ python3 install/bootstrap_vscode_workspace.py \
   --runtimes both
 ```
 
-### 3. Run dashboard tooling
+This step generates:
 
-Terminal dashboard docs:
+- project-root `AGENTS.md`
+- `.vscode/tasks.json`
+- Gemini compatibility settings when Gemini is enabled
 
-- [tools/compact_dashboard/README.md](/Users/david_chen/Desktop/antigravity-codex-deployment/tools/compact_dashboard/README.md)
+The generated VSCode task surface includes:
 
-Desktop app source and build entrypoint:
+- `Shared Fabric: Boot Current Workspace`
+- `Shared Fabric: Sync Current Workspace`
+- `Shared Fabric: Postflight Sync`
+- `Shared Fabric: Open Global Root`
+- `Shared Fabric: Rebuild Workspace Entry`
 
-- [FloatingDashboard.swift](/Users/david_chen/Desktop/antigravity-codex-deployment/tools/compact_dashboard_desktop/FloatingDashboard.swift)
-- [build_dashboard_app.sh](/Users/david_chen/Desktop/antigravity-codex-deployment/tools/compact_dashboard_desktop/build_dashboard_app.sh)
+## What The Desktop App Adds
 
-## Release Notes
+The macOS app is designed as a lightweight operator surface instead of a second source of truth.
 
-- [v2.0.0](/Users/david_chen/Desktop/antigravity-codex-deployment/docs/releases/v2.0.0.md)
-- [v3.0.0](/Users/david_chen/Desktop/antigravity-codex-deployment/docs/releases/v3.0.0.md)
+- Auto-follow or pin a workspace
+- Inspect the latest sync delta without opening lane files manually
+- Browse cumulative project memory across all six lanes
+- Open setup actions from the app when provisioning a new machine or workspace
+- Track the exact six-stage workflow in real time
 
-## Status
+## Shared Memory Model
 
-The repository now represents the setup-first Shared Fabric Dashboard baseline:
+The shared fabric keeps one canonical memory family and expands task outputs into six visible boards:
 
-- canonical shared-fabric sync and memory tooling
-- workspace-first Codex/Gemini enablement
-- rich project-memory browsing
-- setup assistant in the macOS app
-- static packaged app icon pipeline
+| Board | Purpose |
+| --- | --- |
+| `Decision` | Chosen approaches, architecture calls, user-approved directions |
+| `Handoff` | Current state, completed work, and exact next actions |
+| `Mem` | Trial-and-error, reasoning paths, and nuanced rationale |
+| `Loop` | Blockers, unresolved risks, and remaining work |
+| `Learn` | Stable reusable lessons and promoted learnings |
+| `Receipt` | Sync audit records, counts, provenance, and cross-links |
 
-For public publishing, this repo should be treated as the product/deployment snapshot, not as a live export of local secrets or machine-private memory state.
+## Repository Layout
+
+```text
+antigravity-codex-deployment/
+  docs/
+    assets/
+    releases/
+  fabric/
+    scripts/
+      sync/
+  install/
+  tests/
+  tools/
+    compact_dashboard/
+    compact_dashboard_desktop/
+```
+
+## Release Snapshot
+
+`v3.0.0` is the first setup-first public snapshot of Shared Fabric Dashboard.
+
+It includes:
+
+- one-click shared-fabric storage bootstrap
+- workspace-first Codex and Gemini enablement
+- rich project-memory browsing in the desktop app
+- exact six-stage phase visibility
+- clickable sync-delta records
+- a static packaged app icon pipeline
+
+## Notes
+
+- The canonical shared state lives in your chosen `global-agent-fabric` root, not in this repository.
+- VSCode integration is intentionally workspace-first rather than extension-first.
+- Historical bridge metadata is still read for compatibility, but it is now treated as low-noise provenance rather than a primary dashboard concept.
