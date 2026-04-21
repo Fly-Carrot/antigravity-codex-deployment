@@ -224,6 +224,34 @@ def relative_import(from_root: Path, target: Path) -> str:
     return f"@./{rel}"
 
 
+def slugify_workspace_name(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug or "workspace"
+
+
+def resolve_workspace_project(registry: list[dict[str, Any]], workspace: Path) -> dict[str, Any]:
+    project = next(
+        (item for item in registry if Path(str(item["path"])).expanduser().resolve() == workspace),
+        None,
+    )
+    if project is None:
+        return {
+            "id": slugify_workspace_name(workspace.name),
+            "name": workspace.name,
+            "path": str(workspace),
+            "overlay_rules": [],
+            "overlay_root": str(workspace / ".agents"),
+            "registered": False,
+        }
+    resolved = dict(project)
+    resolved.setdefault("name", workspace.name)
+    resolved.setdefault("path", str(workspace))
+    resolved.setdefault("overlay_rules", [])
+    resolved.setdefault("overlay_root", str(workspace / ".agents"))
+    resolved["registered"] = True
+    return resolved
+
+
 def render_workspace_agents(project: dict[str, Any], workspace: Path) -> str:
     lines = [
         MANAGED_MARKER,
@@ -272,6 +300,46 @@ def write_workspace_agents(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def bootstrap_workspace(
+    *,
+    workspace: Path,
+    global_root: Path,
+    gemini_settings: Path,
+    secrets_file: Path,
+) -> dict[str, Any]:
+    registry = parse_project_registry(global_root / "projects" / "registry.yaml")
+    project = resolve_workspace_project(registry, workspace)
+
+    settings = read_settings(gemini_settings)
+    merge_context_filenames(settings)
+
+    secret_env = parse_env_yaml(secrets_file)
+    servers = parse_servers_yaml(global_root / "mcp" / "servers.yaml")
+    rendered_mcp = build_gemini_mcp_servers(servers, secret_env, secrets_file)
+    settings["mcpServers"] = rendered_mcp
+    settings.setdefault("globalAgentFabric", {})["managedBy"] = SETTINGS_MANAGED_BY
+    settings["globalAgentFabric"]["workspaceBootstrap"] = {
+        "workspace": str(workspace),
+        "projectId": str(project["id"]),
+        "globalRoot": str(global_root),
+        "registered": bool(project.get("registered", False)),
+    }
+
+    write_settings(gemini_settings, settings)
+
+    agents_path = workspace / "AGENTS.md"
+    write_workspace_agents(agents_path, render_workspace_agents(project, workspace))
+
+    return {
+        "workspace": str(workspace),
+        "project_id": project["id"],
+        "registered": bool(project.get("registered", False)),
+        "gemini_settings": str(gemini_settings),
+        "agents_file": str(agents_path),
+        "mcp_servers": sorted(rendered_mcp.keys()),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Bootstrap Gemini CLI workspace context and MCP settings from shared fabric."
@@ -289,43 +357,12 @@ def main() -> int:
         or DEFAULT_GEMINI_SETTINGS
     )
     secrets_file = args.secrets_file or (global_root / "mcp" / "secrets.yaml")
-
-    registry = parse_project_registry(global_root / "projects" / "registry.yaml")
-    project = next(
-        (item for item in registry if Path(str(item["path"])).expanduser().resolve() == workspace),
-        None,
+    summary = bootstrap_workspace(
+        workspace=workspace,
+        global_root=global_root,
+        gemini_settings=gemini_settings,
+        secrets_file=secrets_file,
     )
-    if project is None:
-        raise SystemExit(
-            f"Workspace is not registered in {global_root / 'projects' / 'registry.yaml'}: {workspace}"
-        )
-
-    settings = read_settings(gemini_settings)
-    merge_context_filenames(settings)
-
-    secret_env = parse_env_yaml(secrets_file)
-    servers = parse_servers_yaml(global_root / "mcp" / "servers.yaml")
-    rendered_mcp = build_gemini_mcp_servers(servers, secret_env, secrets_file)
-    settings["mcpServers"] = rendered_mcp
-    settings.setdefault("globalAgentFabric", {})["managedBy"] = SETTINGS_MANAGED_BY
-    settings["globalAgentFabric"]["workspaceBootstrap"] = {
-        "workspace": str(workspace),
-        "projectId": str(project["id"]),
-        "globalRoot": str(global_root),
-    }
-
-    write_settings(gemini_settings, settings)
-
-    agents_path = workspace / "AGENTS.md"
-    write_workspace_agents(agents_path, render_workspace_agents(project, workspace))
-
-    summary = {
-        "workspace": str(workspace),
-        "project_id": project["id"],
-        "gemini_settings": str(gemini_settings),
-        "agents_file": str(agents_path),
-        "mcp_servers": sorted(rendered_mcp.keys()),
-    }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

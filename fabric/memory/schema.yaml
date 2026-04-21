@@ -1,0 +1,60 @@
+version: 1
+shared_logs:
+  sync_receipts:
+    purpose: "Hook-level synchronization receipts proving that bootstrap and write-back completed."
+    required:
+      - timestamp
+      - agent
+      - workspace
+      - task_id
+      - phase
+      - status
+      - status_marker
+    recommended:
+      - hook
+      - summary
+  decision_log:
+    purpose: "Cross-project decisions, policy updates, and stable architecture conclusions."
+    required:
+      - timestamp
+      - agent
+      - summary
+    recommended:
+      - workspace
+      - task_id
+      - details
+      - artifacts
+      - tags
+  open_loops:
+    purpose: "Pending blockers, unfinished follow-ups, and risks requiring future action."
+    required:
+      - timestamp
+      - agent
+      - summary
+    recommended:
+      - workspace
+      - task_id
+      - details
+      - artifacts
+      - priority
+      - owner
+  handoffs:
+    purpose: "Structured continuation points for another runtime, agent, or later session."
+    required:
+      - timestamp
+      - agent
+      - summary
+    recommended:
+      - workspace
+      - task_id
+      - details
+      - artifacts
+      - pending_actions
+      - context_refs
+memory_tracks:
+  stable_technical_route:
+    primary_mechanism: "cc-skill-continuous-learning"
+    bridge_file: "memory/ki-registry.yaml"
+  episodic_detail:
+    primary_mechanism: "mempalace"
+    bridge_file: "memory/mempalace-taxonomy.yaml"

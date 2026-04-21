@@ -28,7 +28,7 @@ if [[ -z "${AGF_GLOBAL_ROOT:-}" ]]; then
   exit 1
 fi
 
-BOOTSTRAP_ROOT="${AGF_FRAMEWORK_SOURCE_ROOT:-$AGF_GLOBAL_ROOT}"
+BOOTSTRAP_ROOT="${AGF_FRAMEWORK_SOURCE_ROOT:-$PROJECT_ROOT/fabric}"
 BOOTSTRAP_SCRIPT="$BOOTSTRAP_ROOT/scripts/sync/bootstrap_global_agent_fabric.py"
 
 if [[ ! -f "$BOOTSTRAP_SCRIPT" ]]; then

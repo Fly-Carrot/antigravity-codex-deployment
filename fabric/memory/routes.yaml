@@ -1,0 +1,27 @@
+version: 1
+routes:
+  stable_technical_route:
+    type: "skill"
+    handler: "cc-skill-continuous-learning"
+    source_path: "/Users/david_chen/Antigravity_Skills/awesome-skills/skills/cc-skill-continuous-learning"
+    capture_examples:
+      - "successful environment recipe"
+      - "reusable architecture decision"
+      - "stable implementation pattern"
+      - "cross-session engineering instinct"
+    bridge_outputs:
+      - "/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/ki-registry.yaml"
+      - "/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/decision-log.ndjson"
+  episodic_detail:
+    type: "mcp"
+    handler: "mempalace"
+    source_path: "/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml#mempalace"
+    capture_examples:
+      - "debugging trace"
+      - "reasoning chain"
+      - "parameter exploration"
+      - "failed branch with future retrieval value"
+    bridge_outputs:
+      - "/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/mempalace-taxonomy.yaml"
+      - "/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/handoffs.ndjson"
+      - "/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/open-loops.ndjson"

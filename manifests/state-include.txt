@@ -2,6 +2,9 @@
 /Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/decision-log.ndjson
 /Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/open-loops.ndjson
 /Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/handoffs.ndjson
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/mempalace-records.ndjson
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/promoted-learnings.ndjson
+/Users/david_chen/Antigravity_Skills/global-agent-fabric/sync/learning_receipts.ndjson
 /Users/david_chen/Antigravity_Skills/global-agent-fabric/workflows/imported/
 /Users/david_chen/Desktop/MCP_Hub/.agents/
 /Users/david_chen/Desktop/Project3.5/.agents/

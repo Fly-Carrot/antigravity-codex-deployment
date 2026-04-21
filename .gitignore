@@ -21,3 +21,4 @@ install/paths.yaml
 
 # Built dashboard app bundle
 tools/compact_dashboard_desktop/MCP Hub Dashboard.app/
+tools/compact_dashboard_desktop/Shared Fabric Dashboard.app/
