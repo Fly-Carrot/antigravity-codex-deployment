@@ -1,0 +1,103 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Shared Fabric: Boot Current Workspace",
+      "type": "shell",
+      "command": "/bin/zsh",
+      "args": [
+        "-lc",
+        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\npython3 \"$GLOBAL_ROOT/scripts/sync/preflight_check.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --emit-receipt\npython3 \"$GLOBAL_ROOT/scripts/sync/sync_all.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --skip-preflight \\\n  --skip-receipt",
+        "--",
+        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Shared Fabric: Sync Current Workspace",
+      "type": "shell",
+      "command": "/bin/zsh",
+      "args": [
+        "-lc",
+        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\npython3 \"$GLOBAL_ROOT/scripts/sync/sync_all.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --skip-preflight \\\n  --skip-receipt",
+        "--",
+        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Shared Fabric: Postflight Sync",
+      "type": "shell",
+      "command": "/bin/zsh",
+      "args": [
+        "-lc",
+        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\nSUMMARY=\"${input:sharedFabricSummary}\"\nDECISION=\"${input:sharedFabricDecision}\"\nOPEN_LOOP=\"${input:sharedFabricOpenLoop}\"\nHANDOFF=\"${input:sharedFabricHandoff}\"\nARGS=(--global-root \"$GLOBAL_ROOT\" --workspace \"$WORKSPACE\" --agent \"$AGENT\" --task-id \"$TASK_ID\" --summary \"$SUMMARY\")\nif [[ -n \"$DECISION\" ]]; then ARGS+=(--decision \"$DECISION\"); fi\nif [[ -n \"$OPEN_LOOP\" ]]; then ARGS+=(--open-loop \"$OPEN_LOOP\"); fi\nif [[ -n \"$HANDOFF\" ]]; then ARGS+=(--handoff \"$HANDOFF\"); fi\npython3 \"$GLOBAL_ROOT/scripts/sync/postflight_sync.py\" \"${ARGS[@]}\"",
+        "--",
+        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Shared Fabric: Open Global Root",
+      "type": "shell",
+      "command": "/usr/bin/open",
+      "args": [
+        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Shared Fabric: Rebuild Workspace Entry",
+      "type": "shell",
+      "command": "/bin/zsh",
+      "args": [
+        "-lc",
+        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\npython3 \"/Users/david_chen/Desktop/antigravity-codex-deployment/install/bootstrap_vscode_workspace.py\" --workspace \"${workspaceFolder}\" --global-root \"$GLOBAL_ROOT\" --runtimes both",
+        "--",
+        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "sharedFabricAgent",
+      "type": "pickString",
+      "description": "Select the runtime identity for this shared fabric action",
+      "options": [
+        "codex",
+        "gemini"
+      ]
+    },
+    {
+      "id": "sharedFabricTaskId",
+      "type": "promptString",
+      "description": "Optional task id override for shared fabric commands",
+      "default": ""
+    },
+    {
+      "id": "sharedFabricSummary",
+      "type": "promptString",
+      "description": "Summary for postflight sync",
+      "default": "Shared Fabric postflight sync"
+    },
+    {
+      "id": "sharedFabricDecision",
+      "type": "promptString",
+      "description": "Optional decision note for postflight sync",
+      "default": ""
+    },
+    {
+      "id": "sharedFabricOpenLoop",
+      "type": "promptString",
+      "description": "Optional open loop for postflight sync",
+      "default": ""
+    },
+    {
+      "id": "sharedFabricHandoff",
+      "type": "promptString",
+      "description": "Optional handoff note for postflight sync",
+      "default": ""
+    }
+  ]
+}

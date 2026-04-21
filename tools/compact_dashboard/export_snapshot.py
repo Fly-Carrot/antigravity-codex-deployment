@@ -11,14 +11,14 @@ from dashboard_data import build_state
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export a single JSON snapshot for the compact dashboard surfaces.")
-    parser.add_argument("--workspace", type=Path, default=Path("/Users/david_chen/Desktop/MCP_Hub"))
+    parser.add_argument("--workspace", type=str, default=None)
     parser.add_argument("--global-root", type=str, default=None)
     parser.add_argument("--gemini-settings", type=str, default=None)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
     snapshot = build_state(
-        workspace=args.workspace.expanduser().resolve(),
+        workspace=args.workspace,
         global_root=args.global_root,
         gemini_settings=args.gemini_settings,
     ).to_snapshot()

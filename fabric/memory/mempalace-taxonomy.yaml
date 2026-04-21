@@ -1,0 +1,17 @@
+version: 1
+tag_dimensions:
+  project:
+    description: "Project or workspace identity"
+    examples: ["project4", "project5.5", "mcp-hub"]
+  layer:
+    description: "Concern layer"
+    examples: ["architecture", "debugging", "workflow", "memory", "mcp"]
+  artifact_type:
+    description: "Type of detailed memory"
+    examples: ["trace", "decision_path", "experiment", "postmortem", "handoff_detail"]
+  temporal_role:
+    description: "Where the detail sits in the task lifecycle"
+    examples: ["planning", "execution", "repair", "verification", "handoff"]
+retrieval_guidance:
+  - "When writing a shared handoff, include the MemPalace drawer/tag reference in context_refs when available."
+  - "Prefer narrow project + layer tags before broad semantic search."

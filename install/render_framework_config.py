@@ -133,10 +133,48 @@ def render_hook_policy(values: dict[str, str]) -> str:
     )
 
 
+def render_memory_routes(values: dict[str, str]) -> str:
+    global_root = require(values, "AGF_GLOBAL_ROOT")
+    awesome_skills_root = require(values, "AGF_AWESOME_SKILLS_ROOT")
+    return "\n".join(
+        [
+            "version: 1",
+            "routes:",
+            "  stable_technical_route:",
+            '    type: "skill"',
+            '    handler: "cc-skill-continuous-learning"',
+            f"    source_path: {yaml_quote(awesome_skills_root + '/skills/cc-skill-continuous-learning')}",
+            "    capture_examples:",
+            '      - "successful environment recipe"',
+            '      - "reusable architecture decision"',
+            '      - "stable implementation pattern"',
+            '      - "cross-session engineering instinct"',
+            "    bridge_outputs:",
+            f"      - {yaml_quote(global_root + '/memory/ki-registry.yaml')}",
+            f"      - {yaml_quote(global_root + '/memory/decision-log.ndjson')}",
+            "  episodic_detail:",
+            '    type: "mcp"',
+            '    handler: "mempalace"',
+            f"    source_path: {yaml_quote(global_root + '/mcp/servers.yaml#mempalace')}",
+            "    capture_examples:",
+            '      - "debugging trace"',
+            '      - "reasoning chain"',
+            '      - "parameter exploration"',
+            '      - "failed branch with future retrieval value"',
+            "    bridge_outputs:",
+            f"      - {yaml_quote(global_root + '/memory/mempalace-taxonomy.yaml')}",
+            f"      - {yaml_quote(global_root + '/memory/handoffs.ndjson')}",
+            f"      - {yaml_quote(global_root + '/memory/open-loops.ndjson')}",
+            "",
+        ]
+    )
+
+
 def render_runtime_map(values: dict[str, str]) -> str:
     global_root = require(values, "AGF_GLOBAL_ROOT")
     awesome_skills_root = require(values, "AGF_AWESOME_SKILLS_ROOT")
     gemini_rule = require(values, "AGF_GEMINI_RULE")
+    gemini_settings = require(values, "AGF_GEMINI_SETTINGS")
     antigravity_mcp_config = require(values, "AGF_ANTIGRAVITY_MCP_CONFIG")
     bootstrap_order = [
         f"{global_root}/README.md",
@@ -181,6 +219,35 @@ def render_runtime_map(values: dict[str, str]) -> str:
             "      required_chat_markers:",
             '        - "[BOOT_OK]"',
             '        - "[SYNC_OK]"',
+            '    bridge_context_entrypoint: "AGENTS.md"',
+            "  gemini:",
+            f"    global_rule_source: {yaml_quote(gemini_rule)}",
+            f"    settings_source: {yaml_quote(gemini_settings)}",
+            f"    skills_root: {yaml_quote(awesome_skills_root + '/skills')}",
+            "    preferred_bootstrap_order:",
+        ]
+    )
+    lines.extend([f"      - {yaml_quote(item)}" for item in bootstrap_order])
+    lines.extend(
+        [
+            "    write_routes:",
+            f"      shared_logs_root: {yaml_quote(global_root + '/memory')}",
+            "      stable_technical_route:",
+            '        mechanism: "cc-skill-continuous-learning"',
+            f"        bridge: {yaml_quote(global_root + '/memory/ki-registry.yaml')}",
+            "      episodic_detail:",
+            '        mechanism: "mempalace"',
+            f"        bridge: {yaml_quote(global_root + '/memory/mempalace-taxonomy.yaml')}",
+            "    hook_contract:",
+            "      session_start:",
+            f"        - {yaml_quote(global_root + '/scripts/sync/preflight_check.py')}",
+            f"        - {yaml_quote(global_root + '/scripts/sync/sync_all.py')}",
+            "      session_end:",
+            f"        - {yaml_quote(global_root + '/scripts/sync/postflight_sync.py')}",
+            "      required_chat_markers:",
+            '        - "[BOOT_OK]"',
+            '        - "[SYNC_OK]"',
+            '    bridge_context_entrypoint: "AGENTS.md"',
             "  codex:",
             "    preferred_bootstrap_order:",
         ]
@@ -205,6 +272,7 @@ def render_runtime_map(values: dict[str, str]) -> str:
             "      required_chat_markers:",
             '        - "[BOOT_OK]"',
             '        - "[SYNC_OK]"',
+            '    bridge_context_entrypoint: "AGENTS.md"',
             "project_overlay_policy:",
             '  mode: "read_existing_overlay_only"',
             f"  project_registry: {yaml_quote(global_root + '/projects/registry.yaml')}",
@@ -233,6 +301,9 @@ def main() -> int:
     )
     (output_root / "sync" / "runtime-map.yaml").write_text(
         render_runtime_map(values), encoding="utf-8"
+    )
+    (output_root / "memory" / "routes.yaml").write_text(
+        render_memory_routes(values), encoding="utf-8"
     )
     return 0
 

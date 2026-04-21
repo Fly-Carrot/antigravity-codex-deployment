@@ -133,6 +133,29 @@ class BootstrapGeminiWorkspaceTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 module.write_workspace_agents(path, 'new content')
 
+    def test_bootstrap_workspace_allows_unregistered_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / 'Scratch'
+            workspace.mkdir()
+            (root / 'projects').mkdir(parents=True, exist_ok=True)
+            (root / 'projects' / 'registry.yaml').write_text('version: 1\nprojects:\n', encoding='utf-8')
+            self.make_servers(root)
+            self.make_secrets(root)
+            settings_path = root / 'settings.json'
+
+            summary = module.bootstrap_workspace(
+                workspace=workspace,
+                global_root=root,
+                gemini_settings=settings_path,
+                secrets_file=root / 'mcp' / 'secrets.yaml',
+            )
+
+            self.assertFalse(summary['registered'])
+            self.assertTrue((workspace / 'AGENTS.md').exists())
+            settings = json.loads(settings_path.read_text(encoding='utf-8'))
+            self.assertEqual(settings['context']['fileName'], ['AGENTS.md', 'GEMINI.md'])
+
 
 if __name__ == '__main__':
     unittest.main()

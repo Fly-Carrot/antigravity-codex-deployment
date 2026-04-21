@@ -1,358 +1,199 @@
-# Antigravity + Codex 共享框架部署仓库
+# Shared Fabric Dashboard
 
-这个仓库用于把当前的 Antigravity + Codex 共享框架整理成一套可以迁移、可恢复、适合放在 GitHub 的部署项目。
+Shared Fabric Dashboard is a setup-first deployment repo for a shared agent fabric built around Codex, Gemini, canonical memory lanes, exact six-stage task phases, and a macOS desktop dashboard.
 
-它解决的是两件事：
+This repository is designed to help you do three things well:
 
-1. 在新电脑上把共享框架“装起来”
-2. 把已有记忆、工作流快照、项目 overlay 一起“搬过去”
+1. bootstrap a reusable shared-fabric storage root on a new machine
+2. enable any workspace with a thin `AGENTS.md` bridge plus VSCode task entrypoints
+3. observe task state, sync deltas, and project memory through terminal and desktop dashboards
 
-## 仓库定位
+## What This Repo Contains
 
-这个仓库本身不是你的完整运行时目录，也不是私有状态数据库。
+This repo is not the live shared-fabric state itself. It is the portable control plane for standing that system up elsewhere.
 
-它更像一套“部署控制面”，主要包含：
+It includes:
 
-- 安装脚本
-- 配置模板
-- 状态导出/恢复脚本
-- 迁移清单
-- 说明文档
+- installation and doctor scripts
+- shared-fabric config templates
+- sync and postflight tooling
+- rich memory expansion and backfill tooling
+- a compact terminal dashboard
+- a native macOS desktop dashboard app
+- workspace bootstrap entrypoints for Codex and Gemini
 
-建议把这个仓库放在 GitHub，优先使用私有仓库。
+## Core Product Shape
 
-## 当前目录结构
+The current product direction is setup-first.
+
+That means the main entrypoints are:
+
+- `install/bootstrap_shared_fabric.py`
+  Creates the shared storage root, local path config, framework skeleton, and doctor-checked install chain.
+- `install/bootstrap_vscode_workspace.py`
+  Enables a workspace by generating `AGENTS.md`, `.vscode/tasks.json`, and the Gemini compatibility bridge.
+- `tools/compact_dashboard/`
+  Terminal snapshot and monitoring surface.
+- `tools/compact_dashboard_desktop/`
+  macOS desktop app with workspace switching, settings, sync drill-down, project memory browsing, and setup assistance.
+
+## Major Capabilities
+
+### 1. Shared-Fabric Storage Bootstrap
+
+Use the storage bootstrap to stand up a new canonical shared-fabric root:
+
+```bash
+python3 install/bootstrap_shared_fabric.py
+```
+
+For non-interactive setup:
+
+```bash
+python3 install/bootstrap_shared_fabric.py \
+  --non-interactive \
+  --global-root /path/to/global-agent-fabric \
+  --desktop-root /path/to/Desktop
+```
+
+This bootstrap:
+
+- creates the shared directory skeleton
+- renders local config files
+- installs the framework snapshot into the chosen global root
+- prepares Gemini/Codex-compatible paths
+- runs the doctor chain after installation
+
+### 2. Workspace-First VSCode Enablement
+
+Enable a workspace for shared-fabric usage with:
+
+```bash
+python3 install/bootstrap_vscode_workspace.py \
+  --workspace /path/to/workspace \
+  --global-root /path/to/global-agent-fabric \
+  --runtimes both
+```
+
+This writes:
+
+- project-root `AGENTS.md`
+- `.vscode/tasks.json`
+- Gemini `settings.json` compatibility updates when Gemini is included
+
+The generated VSCode tasks expose:
+
+- `Shared Fabric: Boot Current Workspace`
+- `Shared Fabric: Sync Current Workspace`
+- `Shared Fabric: Postflight Sync`
+- `Shared Fabric: Open Global Root`
+- `Shared Fabric: Rebuild Workspace Entry`
+
+The integration model is intentionally workspace-first rather than a custom VSCode extension. The durable source of truth stays in:
+
+- project `AGENTS.md`
+- canonical shared-fabric scripts
+- shared memory lane files
+
+### 3. Exact Task Observability
+
+The shared fabric supports exact six-stage task tracking:
+
+- `route`
+- `plan`
+- `review`
+- `dispatch`
+- `execute`
+- `report`
+
+These phases are written through the canonical logger and can be observed from the dashboard surfaces.
+
+### 4. Rich Memory Architecture
+
+The shared fabric keeps one canonical memory family, expanded into rich structured bundles across:
+
+- `Decision`
+- `Handoff`
+- `Mem`
+- `Loop`
+- `Learn`
+- `Receipt`
+
+The desktop dashboard now exposes project memory as a real browser rather than only a latest-sync audit surface.
+
+### 5. macOS Dashboard App
+
+The desktop app includes:
+
+- app menu, file menu, view menu, and standard window behavior
+- workspace switching with auto-follow and pinned modes
+- settings persistence through `UserDefaults`
+- project memory browsing with drill-down details
+- sync delta inspection with clickable records
+- setup assistant for storage-root bootstrap and workspace bootstrap
+
+## Repository Layout
 
 ```text
 antigravity-codex-deployment/
   README.md
-  .gitignore
   docs/
     releases/
-      v2.0.0.md
-    gemini-cli-shared-kb-v1.md
-    portable-deployment-plan.md
-    path-migration-checklist.md
   fabric/
+    memory/
     mcp/
-      servers.yaml
-      secrets.example.yaml
     scripts/
       sync/
-        path_config.py
-        bootstrap_gemini_workspace.py
-        log_task_phase.py
+    sync/
   install/
-    env.template
-    paths.template.yaml
-    write_paths_config.py
-    render_framework_config.py
-    install_everything.sh
-    doctor.sh
-    export_state.sh
-    restore_state.sh
-    templates/
-      projects-registry.template.yaml
-      hook-policy.template.yaml
-      runtime-map.template.yaml
   manifests/
-    framework-include.txt
-    state-include.txt
-    exclude.txt
+  tests/
   tools/
     compact_dashboard/
     compact_dashboard_desktop/
 ```
 
-## 2.0 当前发布内容
+## Quick Start
 
-`v2.0` 这一版已经把“共享框架 2.0 基线”整理进仓库，重点包含：
-
-- Gemini CLI shared-knowledge-base 接入方案与一键 bootstrap 源码
-- shared fabric 精确六阶段 phase logger 源码
-- `compact dashboard v2` 终端监控面板
-- macOS 原生浮窗源码与 app build 脚本
-- 路径模板化、安装、导出、恢复、doctor 检查链
-
-这意味着这个仓库现在不只是“部署设计稿”，而是：
-
-- 部署控制面
-- shared-fabric 关键扩展源码快照
-- dashboard pilot 工具源码
-
-## 这套仓库能做什么
-
-### 1. 安装共享框架骨架
-
-通过 `install/install_everything.sh`，可以在目标机器上：
-
-- 生成 `paths.yaml`
-- 运行 `bootstrap_global_agent_fabric.py`
-- 渲染机器专属的 `runtime-map.yaml`、`hook-policy.yaml`、`projects/registry.yaml`
-- 做基础健康检查
-
-### 2. 导出当前状态
-
-通过 `install/export_state.sh`，可以把以下内容打包导出：
-
-- `global-agent-fabric/memory/*.ndjson`
-- `global-agent-fabric/workflows/imported/`
-- 各项目的 `.agents/`
-
-### 3. 恢复已有状态
-
-通过 `install/restore_state.sh`，可以把状态包恢复到新的机器目录中。
-
-### 4. 做健康检查
-
-通过 `install/doctor.sh`，可以验证：
-
-- 关键框架文件是否齐全
-- `preflight_check.py` 是否能通过
-- `sync_all.py` 是否能跑通最小同步链
-
-## 使用前提
-
-请先确保目标机器满足这些条件：
-
-- 已安装 `python3`
-- 已安装 `zsh`
-- 已有或准备创建 `global-agent-fabric` 目标目录
-- 目标机器上有可访问的：
-  - Gemini 规则文件
-  - Antigravity MCP 配置
-  - awesome-skills 目录
-
-如果你的目标是“完整迁移”，还需要准备一份状态包。
-
-## 快速开始
-
-### 第一步：准备环境配置
-
-复制模板：
+### 1. Bootstrap the shared storage root
 
 ```bash
-cp install/env.template install/.env.local
+python3 install/bootstrap_shared_fabric.py
 ```
 
-然后按目标机器实际情况修改 `install/.env.local`。
-
-最关键的变量有：
-
-- `AGF_FRAMEWORK_SOURCE_ROOT`
-- `AGF_GLOBAL_ROOT`
-- `AGF_AWESOME_SKILLS_ROOT`
-- `AGF_GEMINI_SETTINGS`
-- `AGF_GEMINI_RULE`
-- `AGF_ANTIGRAVITY_MCP_CONFIG`
-- `AGF_PROJECT_MCP_HUB`
-- `AGF_PROJECT_4`
-
-说明：
-
-- `AGF_FRAMEWORK_SOURCE_ROOT` 表示“拿来引导安装的现有框架源码位置”
-- `AGF_GLOBAL_ROOT` 表示“目标机器最终要生成的共享框架根目录”
-
-如果你是在当前机器先做迁移演练，这两个路径可以不同。
-
-### 第二步：仅安装框架
+### 2. Enable a workspace
 
 ```bash
-zsh install/install_everything.sh install/.env.local install/paths.yaml
+python3 install/bootstrap_vscode_workspace.py \
+  --workspace /path/to/workspace \
+  --global-root /path/to/global-agent-fabric \
+  --runtimes both
 ```
 
-执行后会完成：
+### 3. Run dashboard tooling
 
-- 路径配置渲染
-- 框架 bootstrap
-- YAML 配置渲染
-- 健康检查
+Terminal dashboard docs:
 
-### 第三步：导出当前状态
+- [tools/compact_dashboard/README.md](/Users/david_chen/Desktop/antigravity-codex-deployment/tools/compact_dashboard/README.md)
 
-如果你要把当前机器的上下文一起带走：
+Desktop app source and build entrypoint:
 
-```bash
-zsh install/export_state.sh install/.env.local ./state-export.tar.gz
-```
+- [FloatingDashboard.swift](/Users/david_chen/Desktop/antigravity-codex-deployment/tools/compact_dashboard_desktop/FloatingDashboard.swift)
+- [build_dashboard_app.sh](/Users/david_chen/Desktop/antigravity-codex-deployment/tools/compact_dashboard_desktop/build_dashboard_app.sh)
 
-### 第四步：安装并恢复状态
+## Release Notes
 
-如果目标机器已经拿到状态包：
+- [v2.0.0](/Users/david_chen/Desktop/antigravity-codex-deployment/docs/releases/v2.0.0.md)
+- [v3.0.0](/Users/david_chen/Desktop/antigravity-codex-deployment/docs/releases/v3.0.0.md)
 
-```bash
-zsh install/install_everything.sh install/.env.local install/paths.yaml ./state-export.tar.gz
-```
+## Status
 
-这会在安装框架后自动恢复：
+The repository now represents the setup-first Shared Fabric Dashboard baseline:
 
-- 共享记忆
-- workflow snapshots
-- 项目 `.agents` overlay
+- canonical shared-fabric sync and memory tooling
+- workspace-first Codex/Gemini enablement
+- rich project-memory browsing
+- setup assistant in the macOS app
+- static packaged app icon pipeline
 
-
-## Gemini CLI 一键接入
-
-首轮 Gemini A+B 落地提供一个 shared-fabric 侧的一键入口：
-
-```bash
-python3 /Users/david_chen/Antigravity_Skills/global-agent-fabric/scripts/sync/bootstrap_gemini_workspace.py \
-  --workspace /Users/david_chen/Desktop/MCP_Hub
-```
-
-这条命令会：
-
-- 合并 `~/.gemini/settings.json`，确保 `AGENTS.md` / `GEMINI.md` 会被 Gemini CLI 识别
-- 从 `global-agent-fabric/mcp/servers.yaml` 渲染 Gemini `mcpServers`
-- 在目标项目根目录生成一个很薄的 `AGENTS.md` 入口文件
-
-注意：
-
-- Gemini MCP 渲染优先读取 `global-agent-fabric/mcp/secrets.yaml`
-- 如果该文件不存在，请先从 `global-agent-fabric/mcp/secrets.example.yaml` 复制并填写本机密钥
-- 首轮只在 `MCP_Hub` 试点验证，但脚本本身面向任何已注册项目目录
-
-仓库里也保留了一份 2.0 发布时的 shared-fabric 侧源码快照，方便后续迁移与对照：
-
-- `fabric/scripts/sync/bootstrap_gemini_workspace.py`
-- `fabric/scripts/sync/log_task_phase.py`
-- `fabric/scripts/sync/path_config.py`
-- `fabric/mcp/servers.yaml`
-- `fabric/mcp/secrets.example.yaml`
-
-这些文件的定位是“发布快照与迁移参考”，不是你的线上 receipts 或本机 secrets。
-
-## Compact Dashboard v2
-
-仓库已经包含 dashboard pilot 工具源码：
-
-- `tools/compact_dashboard/`
-- `tools/compact_dashboard_desktop/`
-
-它们提供：
-
-- 终端版紧凑监控窗口
-- 精确/启发式六阶段条
-- snapshot 导出器
-- macOS 原生浮窗源码
-- `MCP Hub Dashboard.app` 的构建脚本
-
-详细说明请看：
-
-- `tools/compact_dashboard/README.md`
-- `docs/releases/v2.0.0.md`
-
-## 常用脚本说明
-
-### `install/install_everything.sh`
-
-作用：
-
-- 安装最小可用框架
-- 可选恢复状态包
-- 最后执行 `doctor.sh`
-
-参数：
-
-```bash
-zsh install/install_everything.sh <env-file> <paths-output> [state-archive]
-```
-
-### `install/export_state.sh`
-
-作用：
-
-- 按 `manifests/state-include.txt` 导出状态
-- 自动跳过 `manifests/exclude.txt` 中的内容
-
-参数：
-
-```bash
-zsh install/export_state.sh <env-file> <output-archive>
-```
-
-### `install/restore_state.sh`
-
-作用：
-
-- 把状态包恢复到目标机器目录
-
-参数：
-
-```bash
-zsh install/restore_state.sh <env-file> <state-archive>
-```
-
-### `install/doctor.sh`
-
-作用：
-
-- 检查关键文件
-- 验证 `preflight_check.py`
-- 验证 `sync_all.py`
-
-参数：
-
-```bash
-zsh install/doctor.sh <env-file>
-```
-
-## 如何放到 GitHub
-
-建议步骤如下：
-
-1. 在本地进入这个仓库目录
-2. 初始化 Git 仓库
-3. 检查 `.gitignore` 是否符合你的需求
-4. 提交后推送到 GitHub 私有仓库
-
-示例：
-
-```bash
-cd /Users/david_chen/Desktop/antigravity-codex-deployment
-git init
-git add .
-git commit -m "Initial portable deployment project"
-```
-
-然后：
-
-- 在 GitHub 创建一个新的私有仓库
-- 把本地仓库推送上去
-
-## 哪些内容建议不要直接放 GitHub
-
-以下内容建议保持本地或单独加密保存：
-
-- `install/.env.local`
-- 真实 token / API key
-- 导出的状态包
-- 任何包含私人项目上下文的敏感记忆
-
-如果后面你决定长期使用这套部署方式，我建议下一步给状态包增加默认加密。
-
-## 当前完成度
-
-目前已经完成：
-
-- 路径模板化主链
-- 机器专属 YAML 渲染
-- 最小可用安装链
-- 状态导出与恢复链
-
-目前还适合继续加强的部分：
-
-- 状态包默认加密
-- GitHub 发布说明进一步精简
-- 自动初始化 GitHub 仓库或发布脚本
-
-## 建议工作流
-
-如果你要在另一台电脑恢复这套系统，建议按这个顺序：
-
-1. 克隆本仓库
-2. 配置 `install/.env.local`
-3. 准备状态包
-4. 运行 `install/install_everything.sh`
-5. 检查 `doctor.sh` 输出
-6. 再开始使用 Codex / Antigravity
+For public publishing, this repo should be treated as the product/deployment snapshot, not as a live export of local secrets or machine-private memory state.

@@ -5,19 +5,21 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>MCPHubDashboard</string>
+	<string>SharedFabricDashboard</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.flycarrot.mcphub.dashboard</string>
+	<string>com.flycarrot.sharedfabric.dashboard</string>
+	<key>CFBundleIconFile</key>
+	<string>SharedFabricDashboard</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>MCP Hub Dashboard</string>
+	<string>Shared Fabric Dashboard</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0</string>
+	<string>2.3</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>5</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>NSHighResolutionCapable</key>

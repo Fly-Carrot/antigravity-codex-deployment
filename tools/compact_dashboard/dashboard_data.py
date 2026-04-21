@@ -11,22 +11,113 @@ from typing import Any
 
 DEFAULT_GLOBAL_ROOT = Path("/Users/david_chen/Antigravity_Skills/global-agent-fabric")
 DEFAULT_GEMINI_SETTINGS = Path("/Users/david_chen/.gemini/settings.json")
+AUTO_WORKSPACE_SENTINELS = {"", "auto", "latest"}
 PHASE_ORDER = ["route", "plan", "review", "dispatch", "execute", "report"]
 PHASE_LABELS = {
-    "route": "路由",
-    "plan": "规划",
-    "review": "自审",
-    "dispatch": "分发",
-    "execute": "执行",
-    "report": "回奏",
+    "route": "Route",
+    "plan": "Plan",
+    "review": "Review",
+    "dispatch": "Dispatch",
+    "execute": "Execute",
+    "report": "Report",
 }
+WRITE_TARGET_ORDER = [
+    "receipts",
+    "handoffs",
+    "decision_log",
+    "open_loops",
+    "mempalace_records",
+    "promoted_learnings",
+]
+PROJECT_MEMORY_LANES = [
+    "receipts",
+    "handoffs",
+    "decision_log",
+    "open_loops",
+    "mempalace_records",
+    "promoted_learnings",
+]
+PROJECT_MEMORY_LABELS = {
+    "receipts": "Receipt",
+    "handoffs": "Handoff",
+    "decision_log": "Decision",
+    "open_loops": "Loop",
+    "mempalace_records": "Mem",
+    "promoted_learnings": "Learn",
+}
+
+
+@dataclass
+class SyncRecordEntry:
+    target: str
+    title: str
+    timestamp: str
+    summary: str
+    details: str
+    artifacts: list[str]
+    source_path: str
+    route: str
+    mechanism: str
+
+
+@dataclass
+class ProjectMemoryRecord:
+    lane: str
+    title: str
+    timestamp: str
+    summary: str
+    details: str
+    artifacts: list[str]
+    workspace: str
+    task_id: str
+    agent: str
+    type: str
+    source_path: str
+    route: str
+    mechanism: str
+    bridge_session_id: str
+    bridge_mode: str
+    origin_runtime: str
+    target_runtime: str
+    is_bridged: bool
+
+
+@dataclass
+class SyncDelta:
+    writes_count_by_target: dict[str, int]
+    learned_items: list[str]
+    skipped_items: list[str]
+    source_summary: str
+    records: list[SyncRecordEntry]
+
+
+@dataclass
+class TaskHealth:
+    is_booted: bool
+    has_exact_phase: bool
+    has_postflight_sync: bool
+    has_learning_receipt: bool
+
+
+@dataclass
+class WorkspaceOption:
+    path: str
+    label: str
+    source: str
+    last_seen: str
 
 
 @dataclass
 class DashboardState:
     workspace: str
+    workspace_mode: str
     project_name: str
     runtime: str
+    bridge_session_id: str
+    bridge_mode: str
+    origin_runtime: str
+    target_runtime: str
+    is_bridged: bool
     task_id: str
     boot_status: str
     sync_status: str
@@ -40,7 +131,15 @@ class DashboardState:
     enabled_registry_count: int
     disabled_registry_count: int
     recent_tasks: list[dict[str, str]]
+    available_workspaces: list[WorkspaceOption]
     alerts: list[str]
+    last_sync_delta: SyncDelta
+    project_memory_counts: dict[str, int]
+    project_memory_records: list[ProjectMemoryRecord]
+    project_memory_last_updated: str
+    sync_audit_source: str
+    current_task_health: TaskHealth
+    attention_state: str
 
     def to_snapshot(self) -> dict[str, Any]:
         return asdict(self)
@@ -80,6 +179,16 @@ def _parse_timestamp(value: str | None) -> datetime:
     return datetime.fromisoformat(normalized)
 
 
+def _workspace_exists(path: str | Path | None) -> bool:
+    normalized = _normalize_path(path)
+    if not normalized:
+        return False
+    try:
+        return Path(normalized).exists()
+    except OSError:
+        return False
+
+
 def _read_ndjson(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -93,6 +202,12 @@ def _read_ndjson(path: Path) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return records
+
+
+def _is_auto_workspace(value: str | Path | None) -> bool:
+    if value is None:
+        return True
+    return str(value).strip().lower() in AUTO_WORKSPACE_SENTINELS
 
 
 def _parse_scalar(value: str) -> Any:
@@ -158,6 +273,45 @@ def _read_mcp_registry(path: Path) -> list[dict[str, Any]]:
     return servers
 
 
+def _read_project_registry(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    projects: list[dict[str, str]] = []
+    in_projects = False
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx]
+        if line.strip() == "projects:":
+            in_projects = True
+            idx += 1
+            continue
+        if not in_projects:
+            idx += 1
+            continue
+        if line.startswith("  -"):
+            project: dict[str, str] = {}
+            idx += 1
+            while idx < len(lines):
+                raw = lines[idx]
+                if raw.startswith("  -") or (raw and not raw.startswith("    ")):
+                    break
+                stripped = raw.strip()
+                if not stripped or stripped.endswith(":"):
+                    idx += 1
+                    continue
+                if ":" in stripped:
+                    key, raw_value = stripped.split(":", 1)
+                    if key in {"id", "name", "path"}:
+                        project[key] = str(_parse_scalar(raw_value))
+                idx += 1
+            if project.get("path"):
+                projects.append(project)
+            continue
+        idx += 1
+    return projects
+
+
 def _shorten(text: str, width: int = 80) -> str:
     clean = " ".join(text.split())
     if len(clean) <= width:
@@ -205,6 +359,111 @@ def _build_recent_tasks(workspace_receipts: list[dict[str, Any]], handoffs: list
     return recent[:5]
 
 
+def _workspace_label(path: str, registry_by_path: dict[str, dict[str, str]]) -> str:
+    entry = registry_by_path.get(path)
+    if entry and entry.get("name"):
+        return entry["name"]
+    return Path(path).name if path else "(no workspace)"
+
+
+def _build_workspace_activity_map(records: list[dict[str, Any]]) -> dict[str, str]:
+    activity: dict[str, str] = {}
+    for record in records:
+        workspace_path = _normalize_path(record.get("workspace"))
+        timestamp = str(record.get("timestamp") or "")
+        if not workspace_path or not timestamp:
+            continue
+        if workspace_path not in activity or _parse_timestamp(timestamp) > _parse_timestamp(activity[workspace_path]):
+            activity[workspace_path] = timestamp
+    return activity
+
+
+def _build_available_workspaces(
+    current_workspace: str,
+    workspace_mode: str,
+    receipts: list[dict[str, Any]],
+    handoffs: list[dict[str, Any]],
+    learning_receipts: list[dict[str, Any]],
+    registry_projects: list[dict[str, str]],
+) -> list[WorkspaceOption]:
+    registry_by_path_all = {
+        _normalize_path(project.get("path")): project for project in registry_projects if _normalize_path(project.get("path"))
+    }
+    registry_by_path = {
+        path: project for path, project in registry_by_path_all.items() if _workspace_exists(path)
+    }
+    activity_by_path = {
+        path: timestamp
+        for path, timestamp in _build_workspace_activity_map(receipts + handoffs + learning_receipts).items()
+        if _workspace_exists(path)
+    }
+    active_paths = sorted(activity_by_path.keys(), key=lambda path: _parse_timestamp(activity_by_path[path]), reverse=True)
+    registered_paths = sorted(
+        [path for path in registry_by_path.keys() if path not in active_paths],
+        key=lambda path: (_workspace_label(path, registry_by_path).lower(), path.lower()),
+    )
+
+    options: list[WorkspaceOption] = []
+    seen: set[str] = set()
+
+    for path in active_paths:
+        options.append(
+            WorkspaceOption(
+                path=path,
+                label=_workspace_label(path, registry_by_path),
+                source="active",
+                last_seen=activity_by_path.get(path, ""),
+            )
+        )
+        seen.add(path)
+
+    for path in registered_paths:
+        options.append(
+            WorkspaceOption(
+                path=path,
+                label=_workspace_label(path, registry_by_path),
+                source="registered",
+                last_seen=activity_by_path.get(path, ""),
+            )
+        )
+        seen.add(path)
+
+    if workspace_mode == "pinned" and current_workspace and current_workspace not in seen:
+        options.insert(
+            0,
+            WorkspaceOption(
+                path=current_workspace,
+                label=_workspace_label(current_workspace, registry_by_path_all),
+                source="manual",
+                last_seen=activity_by_path.get(current_workspace, ""),
+            ),
+        )
+
+    return options
+
+
+def _resolve_workspace_path(
+    workspace: str | Path | None,
+    receipts: list[dict[str, Any]],
+    handoffs: list[dict[str, Any]],
+    learning_receipts: list[dict[str, Any]],
+) -> str:
+    if not _is_auto_workspace(workspace):
+        return _normalize_path(workspace)
+
+    latest_record: dict[str, Any] | None = None
+    for record in receipts + handoffs + learning_receipts:
+        workspace_value = _normalize_path(record.get("workspace"))
+        if not workspace_value or not _workspace_exists(workspace_value):
+            continue
+        if latest_record is None or _parse_timestamp(record.get("timestamp")) > _parse_timestamp(latest_record.get("timestamp")):
+            latest_record = record
+
+    if latest_record is None:
+        return ""
+    return _normalize_path(latest_record.get("workspace"))
+
+
 def _select_current_task(workspace_receipts: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
     if not workspace_receipts:
         return "-", []
@@ -215,28 +474,32 @@ def _select_current_task(workspace_receipts: list[dict[str, Any]]) -> tuple[str,
     return max(by_task.items(), key=lambda item: max(_parse_timestamp(record.get("timestamp")) for record in item[1]))
 
 
-def _resolve_phase_state(
-    current_records: list[dict[str, Any]],
-    phase_events: list[dict[str, Any]],
-    alerts: list[str],
-) -> tuple[str, list[str], str, str]:
+def _resolve_phase_state(current_records: list[dict[str, Any]], phase_events: list[dict[str, Any]], alerts: list[str]) -> tuple[str, list[str], str, str]:
+    sync_ok = any(item.get("status_marker") == "[SYNC_OK]" for item in current_records)
+    boot_ok = any(item.get("status_marker") == "[BOOT_OK]" for item in current_records)
+
     if phase_events:
         latest = sorted(
             enumerate(phase_events),
             key=lambda item: (_parse_timestamp(item[1].get("timestamp")), item[0]),
         )[-1][1]
         current = str(latest.get("phase_key") or "")
+        if sync_ok and current == "report":
+            note = str(latest.get("note") or latest.get("phase_label") or "")
+            if not note:
+                note = "Task fully synced; waiting for next route."
+            else:
+                note = f"{note} Waiting for next route."
+            return "", PHASE_ORDER[:], note, "exact"
         current_index = PHASE_ORDER.index(current) if current in PHASE_ORDER else -1
         completed = PHASE_ORDER[:current_index] if current_index >= 0 else []
         note = str(latest.get("note") or latest.get("phase_label") or "")
         return current, completed, note, "exact"
 
     if current_records:
-        sync_ok = any(item.get("status_marker") == "[SYNC_OK]" for item in current_records)
-        boot_ok = any(item.get("status_marker") == "[BOOT_OK]" for item in current_records)
         if sync_ok:
             alerts.append("phase source = heuristic")
-            return "report", PHASE_ORDER[:-1], "Derived from [SYNC_OK] receipt.", "heuristic"
+            return "", PHASE_ORDER[:], "Derived from [SYNC_OK] receipt; waiting for next task.", "heuristic"
         if boot_ok:
             alerts.append("phase source = heuristic")
             return "execute", PHASE_ORDER[:4], "Derived from [BOOT_OK] receipt.", "heuristic"
@@ -244,28 +507,432 @@ def _resolve_phase_state(
     return "", [], "", "none"
 
 
-def build_state(
-    workspace: str | Path,
-    global_root: str | Path | None = None,
-    gemini_settings: str | Path | None = None,
-) -> DashboardState:
-    workspace_path = _normalize_path(workspace)
+def _latest_record(records: list[dict[str, Any]]) -> dict[str, Any]:
+    if not records:
+        return {}
+    return max(records, key=lambda item: _parse_timestamp(item.get("timestamp")))
+
+
+def _empty_writes() -> dict[str, int]:
+    return {key: 0 for key in WRITE_TARGET_ORDER}
+
+
+def _resolve_bridge_metadata(records: list[dict[str, Any]]) -> dict[str, Any]:
+    ordered = sorted(records, key=lambda item: _parse_timestamp(item.get("timestamp")), reverse=True)
+    fields = {
+        "bridge_session_id": "",
+        "bridge_mode": "",
+        "origin_runtime": "",
+        "target_runtime": "",
+    }
+    for record in ordered:
+        for key in list(fields.keys()):
+            if fields[key]:
+                continue
+            value = str(record.get(key) or "").strip()
+            if value:
+                fields[key] = value
+    fields["is_bridged"] = any(bool(value) for value in fields.values())
+    return fields
+
+
+def _matching_task_records(
+    records: list[dict[str, Any]],
+    workspace_path: str,
+    task_id: str,
+    *,
+    timestamp: str | None = None,
+    status_marker: str | None = None,
+) -> list[dict[str, Any]]:
+    matched: list[dict[str, Any]] = []
+    for record in records:
+        if _normalize_path(record.get("workspace")) != workspace_path:
+            continue
+        if str(record.get("task_id") or "") != task_id:
+            continue
+        if timestamp and str(record.get("timestamp") or "") != timestamp:
+            continue
+        if status_marker and str(record.get("status_marker") or "") != status_marker:
+            continue
+        matched.append(record)
+    return sorted(matched, key=lambda item: _parse_timestamp(item.get("timestamp")), reverse=True)
+
+
+def _format_learning_receipt_details(record: dict[str, Any]) -> str:
+    detail_parts: list[str] = []
+    writes = record.get("writes") or {}
+    if writes:
+        write_summary = ", ".join(
+            f"{key}={int(value)}"
+            for key, value in writes.items()
+            if int(value) > 0
+        )
+        if write_summary:
+            detail_parts.append(f"Writes: {write_summary}")
+    learned = [str(item) for item in record.get("learned_items") or [] if str(item).strip()]
+    if learned:
+        detail_parts.append("Learned:\n" + "\n".join(f"- {item}" for item in learned))
+    skipped = [str(item) for item in record.get("skipped_items") or [] if str(item).strip()]
+    if skipped:
+        detail_parts.append("Skipped:\n" + "\n".join(f"- {item}" for item in skipped))
+    if str(record.get("details") or "").strip():
+        detail_parts.append(str(record.get("details") or "").strip())
+    return "\n\n".join(detail_parts)
+
+
+def _record_entry(
+    *,
+    target: str,
+    title: str,
+    source_path: Path,
+    record: dict[str, Any],
+    summary: str | None = None,
+    details: str | None = None,
+) -> SyncRecordEntry:
+    return SyncRecordEntry(
+        target=target,
+        title=title,
+        timestamp=str(record.get("timestamp") or ""),
+        summary=str(summary if summary is not None else record.get("summary") or ""),
+        details=str(details if details is not None else record.get("details") or ""),
+        artifacts=[str(item) for item in record.get("artifacts") or [] if str(item).strip()],
+        source_path=str(source_path),
+        route=str(record.get("route") or ""),
+        mechanism=str(record.get("mechanism") or ""),
+    )
+
+
+def _project_memory_entry(
+    *,
+    lane: str,
+    title: str,
+    source_path: Path,
+    record: dict[str, Any],
+    bridge_metadata: dict[str, Any],
+) -> ProjectMemoryRecord:
+    return ProjectMemoryRecord(
+        lane=lane,
+        title=title,
+        timestamp=str(record.get("timestamp") or ""),
+        summary=str(record.get("summary") or record.get("source_summary") or ""),
+        details=str(record.get("details") or ""),
+        artifacts=[str(item) for item in record.get("artifacts") or [] if str(item).strip()],
+        workspace=str(record.get("workspace") or ""),
+        task_id=str(record.get("task_id") or ""),
+        agent=str(record.get("agent") or ""),
+        type=str(record.get("type") or ""),
+        source_path=str(source_path),
+        route=str(record.get("route") or ""),
+        mechanism=str(record.get("mechanism") or ""),
+        bridge_session_id=str(bridge_metadata["bridge_session_id"]),
+        bridge_mode=str(bridge_metadata["bridge_mode"]),
+        origin_runtime=str(bridge_metadata["origin_runtime"]),
+        target_runtime=str(bridge_metadata["target_runtime"]),
+        is_bridged=bool(bridge_metadata["is_bridged"]),
+    )
+
+
+def _is_rich_project_memory_record(record: dict[str, Any]) -> bool:
+    record_type = str(record.get("type") or "")
+    if record_type.endswith("_bundle") or record_type.endswith("_receipt"):
+        return True
+    return str(record.get("bundle_version") or "") == "2" and not record_type.endswith("_import")
+
+
+def _filter_project_memory_records(
+    records_by_lane: dict[str, list[dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    rich_keys: set[tuple[str, str]] = set()
+    for lane, lane_records in records_by_lane.items():
+        for record in lane_records:
+            task_id = str(record.get("task_id") or "").strip()
+            if task_id and _is_rich_project_memory_record(record):
+                rich_keys.add((lane, task_id))
+
+    filtered: dict[str, list[dict[str, Any]]] = {}
+    for lane, lane_records in records_by_lane.items():
+        filtered_lane: list[dict[str, Any]] = []
+        for record in lane_records:
+            task_id = str(record.get("task_id") or "").strip()
+            if task_id and (lane, task_id) in rich_keys and not _is_rich_project_memory_record(record):
+                continue
+            filtered_lane.append(record)
+        filtered[lane] = filtered_lane
+    return filtered
+
+
+def _resolve_project_memory(
+    *,
+    workspace_path: str,
+    receipts_path: Path,
+    handoffs_path: Path,
+    decision_log_path: Path,
+    open_loops_path: Path,
+    mempalace_path: Path,
+    promoted_learnings_path: Path,
+    learning_receipts_path: Path,
+) -> tuple[dict[str, int], list[ProjectMemoryRecord], str]:
+    sources = {
+        "receipts": (learning_receipts_path, "Receipt"),
+        "handoffs": (handoffs_path, "Handoff"),
+        "decision_log": (decision_log_path, "Decision"),
+        "open_loops": (open_loops_path, "Open Loop"),
+        "mempalace_records": (mempalace_path, "MemPalace"),
+        "promoted_learnings": (promoted_learnings_path, "Promoted Learning"),
+    }
+    raw_records_by_lane: dict[str, list[dict[str, Any]]] = {lane: [] for lane in PROJECT_MEMORY_LANES}
+    task_records: dict[str, list[dict[str, Any]]] = {}
+
+    def remember_task_record(record: dict[str, Any]) -> None:
+        task_id = str(record.get("task_id") or "").strip()
+        if not task_id:
+            return
+        task_records.setdefault(task_id, []).append(record)
+
+    for record in _read_ndjson(receipts_path):
+        if _normalize_path(record.get("workspace")) != workspace_path:
+            continue
+        remember_task_record(record)
+
+    for lane, (path, _default_title) in sources.items():
+        for record in _read_ndjson(path):
+            if _normalize_path(record.get("workspace")) != workspace_path:
+                continue
+            raw_records_by_lane[lane].append(record)
+            remember_task_record(record)
+
+    records_by_lane = _filter_project_memory_records(raw_records_by_lane)
+    counts = {lane: 0 for lane in PROJECT_MEMORY_LANES}
+    records: list[ProjectMemoryRecord] = []
+    for lane, (path, default_title) in sources.items():
+        for record in records_by_lane[lane]:
+            counts[lane] += 1
+            task_id = str(record.get("task_id") or "").strip()
+            bridge_metadata = _resolve_bridge_metadata(task_records.get(task_id, [record]))
+            records.append(
+                _project_memory_entry(
+                    lane=lane,
+                    title=str(record.get("title") or default_title),
+                    source_path=path,
+                    record=record,
+                    bridge_metadata=bridge_metadata,
+                )
+            )
+    records.sort(key=lambda item: _parse_timestamp(item.timestamp), reverse=True)
+    last_updated = records[0].timestamp if records else ""
+    return counts, records[:120], last_updated
+
+
+def _resolve_sync_records(
+    *,
+    workspace_path: str,
+    task_id: str,
+    current_records: list[dict[str, Any]],
+    workspace_handoffs: list[dict[str, Any]],
+    workspace_learning: list[dict[str, Any]],
+    handoffs_path: Path,
+    receipts_path: Path,
+    learning_receipts_path: Path,
+    decision_log_path: Path,
+    open_loops_path: Path,
+    mempalace_path: Path,
+    promoted_learnings_path: Path,
+) -> list[SyncRecordEntry]:
+    if not task_id or task_id == "-":
+        return []
+
+    receipt_records = _read_ndjson(receipts_path)
+    decision_records = _read_ndjson(decision_log_path)
+    open_loop_records = _read_ndjson(open_loops_path)
+    mempalace_records = _read_ndjson(mempalace_path)
+    promoted_records = _read_ndjson(promoted_learnings_path)
+
+    latest_learning = _latest_record([item for item in workspace_learning if str(item.get("task_id") or "") == task_id])
+    if latest_learning:
+        sync_timestamp = str(latest_learning.get("timestamp") or "")
+        entries = [
+            _record_entry(
+                target="receipts",
+                title="Learning Receipt",
+                source_path=learning_receipts_path,
+                record=latest_learning,
+                summary=str(latest_learning.get("source_summary") or "Structured sync audit receipt."),
+                details=_format_learning_receipt_details(latest_learning),
+            )
+        ]
+        for receipt in _matching_task_records(
+            receipt_records,
+            workspace_path,
+            task_id,
+            timestamp=sync_timestamp,
+            status_marker="[SYNC_OK]",
+        ):
+            entries.append(
+                _record_entry(
+                    target="receipts",
+                    title="Session Receipt",
+                    source_path=receipts_path,
+                    record=receipt,
+                )
+            )
+        for record in _matching_task_records(decision_records, workspace_path, task_id, timestamp=sync_timestamp):
+            entries.append(_record_entry(target="decision_log", title="Decision", source_path=decision_log_path, record=record))
+        for record in _matching_task_records(workspace_handoffs, workspace_path, task_id, timestamp=sync_timestamp):
+            entries.append(_record_entry(target="handoffs", title="Handoff", source_path=handoffs_path, record=record))
+        for record in _matching_task_records(open_loop_records, workspace_path, task_id, timestamp=sync_timestamp):
+            entries.append(_record_entry(target="open_loops", title="Open Loop", source_path=open_loops_path, record=record))
+        for record in _matching_task_records(mempalace_records, workspace_path, task_id, timestamp=sync_timestamp):
+            entries.append(_record_entry(target="mempalace_records", title="MemPalace", source_path=mempalace_path, record=record))
+        for record in _matching_task_records(promoted_records, workspace_path, task_id, timestamp=sync_timestamp):
+            entries.append(_record_entry(target="promoted_learnings", title="Promoted Learning", source_path=promoted_learnings_path, record=record))
+        return entries
+
+    latest_sync_receipt = _latest_record(
+        [
+            item
+            for item in current_records
+            if str(item.get("status_marker") or "") == "[SYNC_OK]"
+        ]
+    )
+    if not latest_sync_receipt:
+        return []
+
+    entries = [
+        _record_entry(
+            target="receipts",
+            title="Session Receipt",
+            source_path=receipts_path,
+            record=latest_sync_receipt,
+        )
+    ]
+    latest_handoff = _latest_record([item for item in workspace_handoffs if str(item.get("task_id") or "") == task_id])
+    if latest_handoff:
+            entries.append(
+                _record_entry(
+                    target="handoffs",
+                    title="Handoff",
+                    source_path=handoffs_path,
+                    record=latest_handoff,
+                )
+            )
+    return entries
+
+
+def _resolve_sync_delta(
+    task_id: str,
+    current_records: list[dict[str, Any]],
+    workspace_handoffs: list[dict[str, Any]],
+    learning_receipts: list[dict[str, Any]],
+    sync_records: list[SyncRecordEntry],
+    alerts: list[str],
+) -> tuple[SyncDelta, str, str]:
+    task_learning = [item for item in learning_receipts if str(item.get("task_id") or "") == task_id]
+    if task_learning:
+        latest = _latest_record(task_learning)
+        writes = _empty_writes()
+        for key, value in (latest.get("writes") or {}).items():
+            if key in writes:
+                writes[key] = int(value)
+        learned_items = [str(item) for item in latest.get("learned_items") or [] if str(item).strip()]
+        skipped_items = [str(item) for item in latest.get("skipped_items") or [] if str(item).strip()]
+        if not learned_items:
+            alerts.append("latest sync recorded no learned items")
+            attention_state = "synced_without_learning"
+        else:
+            attention_state = "healthy"
+        return (
+            SyncDelta(
+                writes_count_by_target=writes,
+                learned_items=learned_items[:3],
+                skipped_items=skipped_items[:2],
+                source_summary=_shorten(str(latest.get("source_summary") or ""), 96),
+                records=sync_records,
+            ),
+            "exact",
+            attention_state,
+        )
+
+    sync_ok = any(item.get("status_marker") == "[SYNC_OK]" for item in current_records)
+    if sync_ok:
+        handoff = _latest_record([item for item in workspace_handoffs if str(item.get("task_id") or "") == task_id])
+        inferred = _empty_writes()
+        inferred["receipts"] = 1
+        inferred["handoffs"] = 1 if handoff else 0
+        alerts.append("sync audit source = inferred")
+        alerts.append("latest sync is missing an explicit learning receipt")
+        source_summary = str(_latest_record(current_records).get("summary") or handoff.get("summary") or "")
+        return (
+            SyncDelta(
+                writes_count_by_target=inferred,
+                learned_items=[],
+                skipped_items=[],
+                source_summary=_shorten(source_summary, 96),
+                records=sync_records,
+            ),
+            "inferred",
+            "missing_learning_receipt",
+        )
+
+    boot_ok = any(item.get("status_marker") == "[BOOT_OK]" for item in current_records)
+    if boot_ok:
+        return (
+            SyncDelta(
+                writes_count_by_target=_empty_writes(),
+                learned_items=[],
+                skipped_items=[],
+                source_summary="Waiting for postflight sync.",
+                records=sync_records,
+            ),
+            "none",
+            "active_pending_sync",
+        )
+
+    return (
+        SyncDelta(
+            writes_count_by_target=_empty_writes(),
+            learned_items=[],
+            skipped_items=[],
+            source_summary="No sync manifest yet.",
+            records=sync_records,
+        ),
+        "none",
+        "idle",
+    )
+
+
+def build_state(workspace: str | Path | None = None, global_root: str | Path | None = None, gemini_settings: str | Path | None = None) -> DashboardState:
     global_root_path = resolve_global_root(global_root)
     gemini_settings_path = resolve_gemini_settings(gemini_settings)
+    workspace_mode = "auto" if _is_auto_workspace(workspace) else "pinned"
 
     receipts_path = global_root_path / "sync" / "receipts.ndjson"
     handoffs_path = global_root_path / "memory" / "handoffs.ndjson"
+    decision_log_path = global_root_path / "memory" / "decision-log.ndjson"
+    open_loops_path = global_root_path / "memory" / "open-loops.ndjson"
+    mempalace_path = global_root_path / "memory" / "mempalace-records.ndjson"
+    promoted_learnings_path = global_root_path / "memory" / "promoted-learnings.ndjson"
     phase_log_path = global_root_path / "sync" / "task_phases.ndjson"
+    learning_receipts_path = global_root_path / "sync" / "learning_receipts.ndjson"
     registry_path = global_root_path / "mcp" / "servers.yaml"
+    project_registry_path = global_root_path / "projects" / "registry.yaml"
 
     receipts = _read_ndjson(receipts_path)
     handoffs = _read_ndjson(handoffs_path)
     phase_events = _read_ndjson(phase_log_path)
+    learning_receipts = _read_ndjson(learning_receipts_path)
+    registry_projects = _read_project_registry(project_registry_path)
+    workspace_path = _resolve_workspace_path(workspace, receipts, handoffs, learning_receipts)
 
     workspace_receipts = [item for item in receipts if _normalize_path(item.get("workspace")) == workspace_path]
     workspace_handoffs = [item for item in handoffs if _normalize_path(item.get("workspace")) == workspace_path]
+    workspace_learning = [item for item in learning_receipts if _normalize_path(item.get("workspace")) == workspace_path]
 
     alerts: list[str] = []
+    if _is_auto_workspace(workspace):
+        if workspace_path:
+            alerts.append("workspace source = auto")
+        else:
+            alerts.append("workspace source = auto (no active workspace yet)")
     if not workspace_receipts:
         alerts.append("No receipts found for this workspace yet.")
 
@@ -297,10 +964,35 @@ def build_state(
         alerts=alerts,
     )
 
-    latest_handoff = {}
-    if workspace_handoffs:
-        latest_handoff = max(workspace_handoffs, key=lambda item: _parse_timestamp(item.get("timestamp")))
+    task_handoffs = [item for item in workspace_handoffs if str(item.get("task_id") or "") == task_id]
+    latest_handoff = _latest_record(task_handoffs or workspace_handoffs)
     last_handoff = str(latest_handoff.get("summary") or "No workspace handoff yet.")
+    task_learning_records = [item for item in workspace_learning if str(item.get("task_id") or "") == task_id]
+    bridge_metadata = _resolve_bridge_metadata(current_records + task_handoffs + task_learning_records)
+    sync_records = _resolve_sync_records(
+        workspace_path=workspace_path,
+        task_id=task_id,
+        current_records=current_records,
+        workspace_handoffs=workspace_handoffs,
+        workspace_learning=workspace_learning,
+        handoffs_path=handoffs_path,
+        receipts_path=receipts_path,
+        learning_receipts_path=learning_receipts_path,
+        decision_log_path=decision_log_path,
+        open_loops_path=open_loops_path,
+        mempalace_path=mempalace_path,
+        promoted_learnings_path=promoted_learnings_path,
+    )
+    project_memory_counts, project_memory_records, project_memory_last_updated = _resolve_project_memory(
+        workspace_path=workspace_path,
+        receipts_path=receipts_path,
+        handoffs_path=handoffs_path,
+        decision_log_path=decision_log_path,
+        open_loops_path=open_loops_path,
+        mempalace_path=mempalace_path,
+        promoted_learnings_path=promoted_learnings_path,
+        learning_receipts_path=learning_receipts_path,
+    )
 
     settings_payload = {}
     if gemini_settings_path.exists():
@@ -310,11 +1002,40 @@ def build_state(
     registry_servers = _read_mcp_registry(registry_path)
     enabled_registry_count = sum(1 for item in registry_servers if item.get("enabled") is True)
     disabled_registry_count = sum(1 for item in registry_servers if item.get("enabled") is False)
+    available_workspaces = _build_available_workspaces(
+        current_workspace=workspace_path,
+        workspace_mode=workspace_mode,
+        receipts=receipts,
+        handoffs=handoffs,
+        learning_receipts=learning_receipts,
+        registry_projects=registry_projects,
+    )
+
+    last_sync_delta, sync_audit_source, attention_state = _resolve_sync_delta(
+        task_id=task_id,
+        current_records=current_records,
+        workspace_handoffs=workspace_handoffs,
+        learning_receipts=workspace_learning,
+        sync_records=sync_records,
+        alerts=alerts,
+    )
+    current_task_health = TaskHealth(
+        is_booted=boot_status == "OK",
+        has_exact_phase=phase_source == "exact",
+        has_postflight_sync=sync_status == "OK",
+        has_learning_receipt=sync_audit_source == "exact",
+    )
 
     return DashboardState(
         workspace=workspace_path,
-        project_name=Path(workspace_path).name,
+        workspace_mode=workspace_mode,
+        project_name=Path(workspace_path).name if workspace_path else "(no workspace)",
         runtime=runtime,
+        bridge_session_id=str(bridge_metadata["bridge_session_id"]),
+        bridge_mode=str(bridge_metadata["bridge_mode"]),
+        origin_runtime=str(bridge_metadata["origin_runtime"]),
+        target_runtime=str(bridge_metadata["target_runtime"]),
+        is_bridged=bool(bridge_metadata["is_bridged"]),
         task_id=task_id,
         boot_status=boot_status,
         sync_status=sync_status,
@@ -328,5 +1049,13 @@ def build_state(
         enabled_registry_count=enabled_registry_count,
         disabled_registry_count=disabled_registry_count,
         recent_tasks=_build_recent_tasks(workspace_receipts, workspace_handoffs),
+        available_workspaces=available_workspaces,
         alerts=alerts,
+        last_sync_delta=last_sync_delta,
+        project_memory_counts=project_memory_counts,
+        project_memory_records=project_memory_records,
+        project_memory_last_updated=project_memory_last_updated,
+        sync_audit_source=sync_audit_source,
+        current_task_health=current_task_health,
+        attention_state=attention_state,
     )
