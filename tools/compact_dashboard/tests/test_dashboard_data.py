@@ -266,6 +266,92 @@ class DashboardDataTests(unittest.TestCase):
             self.assertEqual(bridge_handoff.origin_runtime, "codex")
             self.assertEqual(bridge_handoff.target_runtime, "gemini")
 
+    def test_build_state_includes_user_question_profile_views(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "Project4"
+            workspace.mkdir()
+            settings_path = self._base_fixture(root, workspace)
+            self._write(
+                root / "sync" / "receipts.ndjson",
+                json.dumps(
+                    {
+                        "agent": "codex",
+                        "status_marker": "[SYNC_OK]",
+                        "task_id": "task-profile",
+                        "timestamp": "2026-04-22T01:00:00Z",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "user-question-profiles.ndjson",
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "task_id": "task-a",
+                                "timestamp": "2026-04-21T08:00:00Z",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "task_id": "task-b",
+                                "timestamp": "2026-04-21T09:00:00Z",
+                                "workspace": str(root / "Elsewhere"),
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Global User Question Profile",
+                        "",
+                        "Compiled from `2` distilled user-question snapshots across `2` workspace(s).",
+                        "Last updated: `2026-04-22T01:00:00Z`",
+                        "",
+                        "## Questioning DNA",
+                        "",
+                        "- Starts from: risks (2), scope (1)",
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                workspace / ".agents" / "sync" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Workspace User Question Profile",
+                        "",
+                        "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+                        "Last updated: `2026-04-22T01:00:00Z`",
+                        "",
+                        "## Focus Points",
+                        "",
+                        "- Shared memory correctness (1)",
+                    ]
+                )
+                + "\n",
+            )
+
+            state = build_state(workspace=workspace, global_root=root, gemini_settings=settings_path)
+
+            self.assertEqual(state.user_question_profile.snapshot_count, 2)
+            self.assertEqual(state.user_question_profile.workspace_snapshot_count, 1)
+            self.assertEqual(state.user_question_profile.global_profile.summary, "Compiled from `2` distilled user-question snapshots across `2` workspace(s).")
+            self.assertEqual(state.user_question_profile.global_profile.updated_at, "2026-04-22T01:00:00Z")
+            self.assertIn("Starts from: risks", state.user_question_profile.global_profile.preview)
+            self.assertEqual(state.user_question_profile.workspace_profile.summary, "Compiled from `1` distilled user-question snapshots across `1` workspace(s).")
+            self.assertIn("Shared memory correctness", state.user_question_profile.workspace_profile.preview)
+
     def test_project_memory_prefers_rich_bundle_over_legacy_duplicate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

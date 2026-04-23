@@ -128,6 +128,42 @@ class SnapshotAndPhaseLoggerTests(unittest.TestCase):
                 + "\n",
             )
             self._write(
+                root / "memory" / "user-question-profiles.ndjson",
+                json.dumps(
+                    {
+                        "agent": "codex",
+                        "task_id": "task-live",
+                        "timestamp": "2026-04-20T06:01:00Z",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Global User Question Profile",
+                        "",
+                        "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+                        "Last updated: `2026-04-20T06:01:00Z`",
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                workspace / ".agents" / "sync" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Workspace User Question Profile",
+                        "",
+                        "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+                        "Last updated: `2026-04-20T06:01:00Z`",
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
                 root / "mcp" / "servers.yaml",
                 "\n".join(
                     [
@@ -170,6 +206,12 @@ class SnapshotAndPhaseLoggerTests(unittest.TestCase):
             self.assertEqual(payload["sync_audit_source"], "exact")
             self.assertEqual(payload["last_sync_delta"]["learned_items"], ["Snapshot carries sync delta"])
             self.assertEqual(payload["last_sync_delta"]["records"][0]["title"], "Learning Receipt")
+            self.assertEqual(payload["user_question_profile"]["snapshot_count"], 1)
+            self.assertEqual(payload["user_question_profile"]["workspace_snapshot_count"], 1)
+            self.assertEqual(
+                payload["user_question_profile"]["global_profile"]["summary"],
+                "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+            )
             self.assertIn("project_memory_counts", payload)
             self.assertIn("project_memory_records", payload)
             self.assertEqual(payload["attention_state"], "healthy")

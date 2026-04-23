@@ -189,7 +189,7 @@ def build_workflow_sources(awesome_skills_root: Path) -> dict[str, Any]:
     }
 
 
-def build_skills_sources(awesome_skills_root: Path) -> dict[str, Any]:
+def build_skills_sources(awesome_skills_root: Path, global_root: Path) -> dict[str, Any]:
     skills_root = awesome_skills_root / "skills"
     skill_count = len(list(skills_root.glob("*/SKILL.md"))) if skills_root.exists() else 0
     return {
@@ -200,6 +200,12 @@ def build_skills_sources(awesome_skills_root: Path) -> dict[str, Any]:
                 "type": "skill_repo",
                 "path": str(skills_root),
                 "skill_count": skill_count,
+            },
+            {
+                "id": "generated-shared-fabric-skills",
+                "type": "generated_skill_repo",
+                "path": str(global_root / "skills" / "generated"),
+                "skill_count": 0,
             }
         ],
     }
@@ -277,7 +283,7 @@ Project overlays are registered in `projects/registry.yaml`.
 
     write_yaml(global_root / "projects" / "registry.yaml", build_project_registry(projects))
     write_yaml(global_root / "workflows" / "sources.yaml", build_workflow_sources(args.awesome_skills_root))
-    write_yaml(global_root / "skills" / "sources.yaml", build_skills_sources(args.awesome_skills_root))
+    write_yaml(global_root / "skills" / "sources.yaml", build_skills_sources(args.awesome_skills_root, global_root))
     write_yaml(global_root / "mcp" / "servers.yaml", sanitize_mcp(load_json(args.mcp_config), global_root / "mcp" / "servers.yaml"))
     write_yaml(
         global_root / "mcp" / "secrets.example.yaml",

@@ -45,6 +45,9 @@ PROJECT_MEMORY_LABELS = {
     "mempalace_records": "Mem",
     "promoted_learnings": "Learn",
 }
+USER_QUESTION_PROFILE_LOG = "memory/user-question-profiles.ndjson"
+GLOBAL_USER_QUESTION_PROFILE = "memory/user-question-profile.md"
+WORKSPACE_USER_QUESTION_PROFILE = ".agents/sync/user-question-profile.md"
 
 
 @dataclass
@@ -108,6 +111,26 @@ class WorkspaceOption:
 
 
 @dataclass
+class QuestionProfileDocument:
+    title: str
+    summary: str
+    preview: str
+    content: str
+    path: str
+    updated_at: str
+    is_available: bool
+    is_placeholder: bool
+
+
+@dataclass
+class UserQuestionProfileState:
+    snapshot_count: int
+    workspace_snapshot_count: int
+    global_profile: QuestionProfileDocument
+    workspace_profile: QuestionProfileDocument
+
+
+@dataclass
 class DashboardState:
     workspace: str
     workspace_mode: str
@@ -134,6 +157,7 @@ class DashboardState:
     available_workspaces: list[WorkspaceOption]
     alerts: list[str]
     last_sync_delta: SyncDelta
+    user_question_profile: UserQuestionProfileState
     project_memory_counts: dict[str, int]
     project_memory_records: list[ProjectMemoryRecord]
     project_memory_last_updated: str
@@ -321,6 +345,12 @@ def _shorten(text: str, width: int = 80) -> str:
     return clean[: width - 1] + "..."
 
 
+def _read_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
 def _build_recent_tasks(workspace_receipts: list[dict[str, Any]], handoffs: list[dict[str, Any]]) -> list[dict[str, str]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for record in workspace_receipts:
@@ -364,6 +394,82 @@ def _workspace_label(path: str, registry_by_path: dict[str, dict[str, str]]) -> 
     if entry and entry.get("name"):
         return entry["name"]
     return Path(path).name if path else "(no workspace)"
+
+
+def _meaningful_profile_lines(content: str) -> list[str]:
+    lines: list[str] = []
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("<!--") or line.startswith("# "):
+            continue
+        lines.append(line)
+    return lines
+
+
+def _profile_updated_at(path: Path, content: str) -> str:
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if line.startswith("Last updated:"):
+            return line.removeprefix("Last updated:").strip().strip("`")
+    if not path.exists():
+        return ""
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def _question_profile_document(path: Path | None, *, title: str, missing_summary: str) -> QuestionProfileDocument:
+    if path is None:
+        return QuestionProfileDocument(
+            title=title,
+            summary=missing_summary,
+            preview="",
+            content="",
+            path="",
+            updated_at="",
+            is_available=False,
+            is_placeholder=True,
+        )
+
+    content = _read_text(path)
+    lines = _meaningful_profile_lines(content)
+    summary = lines[0] if lines else missing_summary
+    preview_lines = lines[1:6] if len(lines) > 1 else []
+    preview = _shorten(" ".join(preview_lines), 280) if preview_lines else ""
+    lowered = " ".join(lines[:3]).lower()
+    is_placeholder = "no distilled user question profile" in lowered or "no compiled user questioning profile" in lowered
+    return QuestionProfileDocument(
+        title=title,
+        summary=summary,
+        preview=preview,
+        content=content.strip(),
+        path=str(path),
+        updated_at=_profile_updated_at(path, content),
+        is_available=path.exists(),
+        is_placeholder=is_placeholder,
+    )
+
+
+def _resolve_user_question_profile(*, global_root: Path, workspace_path: str) -> UserQuestionProfileState:
+    records = _read_ndjson(global_root / USER_QUESTION_PROFILE_LOG)
+    workspace_records = [
+        record for record in records if _normalize_path(record.get("workspace")) == workspace_path
+    ]
+    workspace_profile_path = Path(workspace_path) / WORKSPACE_USER_QUESTION_PROFILE if workspace_path else None
+    return UserQuestionProfileState(
+        snapshot_count=len(records),
+        workspace_snapshot_count=len(workspace_records),
+        global_profile=_question_profile_document(
+            global_root / GLOBAL_USER_QUESTION_PROFILE,
+            title="Global Profile",
+            missing_summary="No compiled global question profile yet.",
+        ),
+        workspace_profile=_question_profile_document(
+            workspace_profile_path,
+            title="Workspace Overlay",
+            missing_summary="No workspace question overlay is available yet.",
+        ),
+    )
 
 
 def _build_workspace_activity_map(records: list[dict[str, Any]]) -> dict[str, str]:
@@ -993,6 +1099,10 @@ def build_state(workspace: str | Path | None = None, global_root: str | Path | N
         promoted_learnings_path=promoted_learnings_path,
         learning_receipts_path=learning_receipts_path,
     )
+    user_question_profile = _resolve_user_question_profile(
+        global_root=global_root_path,
+        workspace_path=workspace_path,
+    )
 
     settings_payload = {}
     if gemini_settings_path.exists():
@@ -1052,6 +1162,7 @@ def build_state(workspace: str | Path | None = None, global_root: str | Path | N
         available_workspaces=available_workspaces,
         alerts=alerts,
         last_sync_delta=last_sync_delta,
+        user_question_profile=user_question_profile,
         project_memory_counts=project_memory_counts,
         project_memory_records=project_memory_records,
         project_memory_last_updated=project_memory_last_updated,

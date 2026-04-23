@@ -16,6 +16,12 @@ from memory_expansion import (
     utc_now_iso,
 )
 from path_config import resolve_global_root, resolve_workspace
+from user_question_profiles import (
+    PROFILE_FILENAME,
+    build_user_question_profile_record,
+    compile_user_question_profiles,
+    parse_profile_json_arg,
+)
 
 def bridge_field(cli_value: str | None, env_name: str) -> str:
     value = (cli_value or os.environ.get(env_name) or "").strip()
@@ -43,6 +49,7 @@ def main() -> int:
     parser.add_argument("--origin-runtime")
     parser.add_argument("--target-runtime")
     parser.add_argument("--context-entrypoint")
+    parser.add_argument("--user-question-profile-json")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -66,6 +73,7 @@ def main() -> int:
         "context_entrypoint": bridge_field(args.context_entrypoint, "AGF_MULTICLI_CONTEXT_ENTRYPOINT"),
     }
     bridge_metadata = {key: value for key, value in bridge_metadata.items() if value}
+    question_profile_payload = parse_profile_json_arg(args.user_question_profile_json)
 
     bundle_records = compose_postflight_bundle(
         timestamp=timestamp,
@@ -91,6 +99,17 @@ def main() -> int:
         (memory_root / "mempalace-records.ndjson", bundle_records[3]),
         (memory_root / "promoted-learnings.ndjson", bundle_records[4]),
     ]
+    user_question_profile_record = None
+    if question_profile_payload is not None:
+        user_question_profile_record = build_user_question_profile_record(
+            timestamp=timestamp,
+            agent=args.agent,
+            workspace=args.workspace,
+            task_id=args.task_id,
+            task_summary=args.summary,
+            artifacts=artifacts,
+            payload=question_profile_payload,
+        )
     learning_receipt = learning_receipt_record(
         timestamp=timestamp,
         agent=args.agent,
@@ -106,6 +125,8 @@ def main() -> int:
         source_refs=artifacts,
         extra=bridge_metadata,
     )
+    if user_question_profile_record is not None:
+        learning_receipt["writes"]["user_question_profiles"] = 1
     sync_receipt_record = {
         "timestamp": timestamp,
         "agent": args.agent,
@@ -120,31 +141,36 @@ def main() -> int:
     }
 
     if args.dry_run:
+        payload: dict[str, Any] = {
+            "status": "dry_run",
+            "status_marker": "[SYNC_DRY_RUN]",
+            "records": [{"target": str(path), "record": record} for path, record in records],
+            "learning_receipt": {
+                "target": str(sync_root / "learning_receipts.ndjson"),
+                "record": learning_receipt,
+            },
+            "receipt": {
+                "target": str(sync_root / "receipts.ndjson"),
+                "record": {**sync_receipt_record, "status": "dry_run", "status_marker": "[SYNC_DRY_RUN]"},
+            },
+        }
+        if user_question_profile_record is not None:
+            payload["user_question_profile"] = {
+                "target": str(memory_root / PROFILE_FILENAME),
+                "record": user_question_profile_record,
+            }
         print(
-            json.dumps(
-                {
-                    "status": "dry_run",
-                    "status_marker": "[SYNC_DRY_RUN]",
-                    "records": [{"target": str(path), "record": record} for path, record in records],
-                    "learning_receipt": {
-                        "target": str(sync_root / "learning_receipts.ndjson"),
-                        "record": learning_receipt,
-                    },
-                    "receipt": {
-                        "target": str(sync_root / "receipts.ndjson"),
-                        "record": {**sync_receipt_record, "status": "dry_run", "status_marker": "[SYNC_DRY_RUN]"},
-                    },
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+            json.dumps(payload, ensure_ascii=False, indent=2)
         )
         return 0
 
     for path, record in records:
         append_record(path, record)
+    if user_question_profile_record is not None:
+        append_record(memory_root / PROFILE_FILENAME, user_question_profile_record)
     append_record(sync_root / "learning_receipts.ndjson", learning_receipt)
     append_record(sync_root / "receipts.ndjson", sync_receipt_record)
+    compiled_outputs = compile_user_question_profiles(args.global_root, args.workspace) if user_question_profile_record is not None else {}
     print(
         json.dumps(
             {
@@ -157,6 +183,8 @@ def main() -> int:
                 "writes": learning_receipt["writes"],
                 "learned_items": learned_items,
                 "skipped_items": skipped_items,
+                "user_question_profile_target": str(memory_root / PROFILE_FILENAME) if user_question_profile_record is not None else "",
+                "compiled_user_question_outputs": compiled_outputs,
             },
             ensure_ascii=False,
             indent=2,

@@ -13,6 +13,7 @@ Both surfaces read the same shared state:
 - `sync/task_phases.ndjson`
 - `sync/learning_receipts.ndjson`
 - `memory/handoffs.ndjson`
+- `memory/user-question-profile.md`
 - Gemini `settings.json`
 - shared `mcp/servers.yaml`
 
@@ -62,6 +63,15 @@ That record carries:
 - the source summary for the sync
 
 This is the data source behind the `Sync Delta` card in the floating dashboard.
+
+## User Question Profile
+
+If postflight writes a distilled `--user-question-profile-json` payload, the shared fabric compiles:
+
+- a global questioning profile at `memory/user-question-profile.md`
+- a workspace overlay at `workspace/.agents/sync/user-question-profile.md`
+
+The macOS dashboard now shows both of those compiled views in a dedicated `Question Profile` card so you can quickly compare stable cross-project preferences against the current workspace overlay.
 
 ## Terminal Dashboard
 

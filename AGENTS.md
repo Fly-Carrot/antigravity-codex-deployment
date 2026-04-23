@@ -11,6 +11,8 @@ This file is the project-scoped context bridge for Gemini CLI and Codex.
 
 ## Workspace Imports
 
+@./.agents/sync/user-question-profile.md
+
 _No additional project overlay rules are registered for this workspace._
 
 ## Optional Deep Context

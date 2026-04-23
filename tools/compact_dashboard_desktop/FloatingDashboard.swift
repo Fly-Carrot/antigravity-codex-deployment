@@ -183,6 +183,42 @@ struct TaskHealth: Codable {
     }
 }
 
+struct QuestionProfileDocument: Codable {
+    let title: String
+    let summary: String
+    let preview: String
+    let content: String
+    let path: String
+    let updatedAt: String
+    let isAvailable: Bool
+    let isPlaceholder: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case summary
+        case preview
+        case content
+        case path
+        case updatedAt = "updated_at"
+        case isAvailable = "is_available"
+        case isPlaceholder = "is_placeholder"
+    }
+}
+
+struct UserQuestionProfileState: Codable {
+    let snapshotCount: Int
+    let workspaceSnapshotCount: Int
+    let globalProfile: QuestionProfileDocument
+    let workspaceProfile: QuestionProfileDocument
+
+    enum CodingKeys: String, CodingKey {
+        case snapshotCount = "snapshot_count"
+        case workspaceSnapshotCount = "workspace_snapshot_count"
+        case globalProfile = "global_profile"
+        case workspaceProfile = "workspace_profile"
+    }
+}
+
 struct DashboardSnapshot: Codable {
     let workspace: String
     let workspaceMode: String
@@ -209,6 +245,7 @@ struct DashboardSnapshot: Codable {
     let availableWorkspaces: [WorkspaceOption]
     let alerts: [String]
     let lastSyncDelta: SyncDelta
+    let userQuestionProfile: UserQuestionProfileState
     let projectMemoryCounts: [String: Int]
     let projectMemoryRecords: [ProjectMemoryRecord]
     let projectMemoryLastUpdated: String
@@ -242,6 +279,7 @@ struct DashboardSnapshot: Codable {
         case availableWorkspaces = "available_workspaces"
         case alerts
         case lastSyncDelta = "last_sync_delta"
+        case userQuestionProfile = "user_question_profile"
         case projectMemoryCounts = "project_memory_counts"
         case projectMemoryRecords = "project_memory_records"
         case projectMemoryLastUpdated = "project_memory_last_updated"
@@ -1121,6 +1159,73 @@ struct ProjectMemoryBrowserView: View {
     }
 }
 
+enum DashboardModal: Identifiable {
+    case syncTarget(String)
+    case questionProfile(String)
+
+    var id: String {
+        switch self {
+        case .syncTarget(let key):
+            return "sync-\(key)"
+        case .questionProfile(let scope):
+            return "profile-\(scope)"
+        }
+    }
+}
+
+struct QuestionProfileDetailView: View {
+    let title: String
+    let profile: QuestionProfileDocument
+    let onOpenPath: (String) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                Spacer()
+                if !profile.path.isEmpty {
+                    Button("Open Markdown") {
+                        onOpenPath(profile.path)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Button("Done", action: onClose)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(profile.summary)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                if !profile.updatedAt.isEmpty {
+                    Text("Updated \(profile.updatedAt)")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ScrollView {
+                Text(profile.content.isEmpty ? "No compiled profile content is available yet." : profile.content)
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundStyle(profile.content.isEmpty ? .secondary : .primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    )
+            }
+        }
+        .padding(20)
+        .frame(width: 660, height: 500)
+    }
+}
+
 struct DashboardRootView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @ObservedObject var preferences: DashboardPreferences
@@ -1135,7 +1240,7 @@ struct DashboardRootView: View {
     let onSelectWorkspace: (String) -> Void
     let onPreviousWorkspace: () -> Void
     let onNextWorkspace: () -> Void
-    @State private var selectedSyncTarget: String?
+    @State private var presentedModal: DashboardModal?
 
     var body: some View {
         ZStack {
@@ -1155,6 +1260,7 @@ struct DashboardRootView: View {
                         sessionCard(snapshot: snapshot)
                         phaseCard(snapshot: snapshot)
                         syncDeltaCard(snapshot: snapshot)
+                        questionProfileCard(snapshot: snapshot)
                         projectMemoryCard(snapshot: snapshot)
                         recentActivityCard(snapshot: snapshot)
                         footerBar
@@ -1177,21 +1283,29 @@ struct DashboardRootView: View {
         }
         .frame(minWidth: 520, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity, alignment: .topLeading)
         .animation(.easeInOut(duration: 0.25), value: viewModel.refreshToken)
-        .sheet(
-            isPresented: Binding(
-                get: { selectedSyncTarget != nil },
-                set: { if !$0 { selectedSyncTarget = nil } }
-            )
-        ) {
+        .sheet(item: $presentedModal) { modal in
             if let snapshot = viewModel.snapshot {
-                let targetKey = selectedSyncTarget ?? ""
-                let label = writeTargetLabels[targetKey] ?? targetKey
-                SyncRecordsDetailView(
-                    title: "\(label) Details",
-                    records: snapshot.lastSyncDelta.records.filter { $0.target == targetKey },
-                    onOpenPath: onOpenPath,
-                    onClose: { selectedSyncTarget = nil }
-                )
+                switch modal {
+                case .syncTarget(let targetKey):
+                    let label = writeTargetLabels[targetKey] ?? targetKey
+                    SyncRecordsDetailView(
+                        title: "\(label) Details",
+                        records: snapshot.lastSyncDelta.records.filter { $0.target == targetKey },
+                        onOpenPath: onOpenPath,
+                        onClose: { presentedModal = nil }
+                    )
+                case .questionProfile(let scope):
+                    let profile = scope == "workspace"
+                        ? snapshot.userQuestionProfile.workspaceProfile
+                        : snapshot.userQuestionProfile.globalProfile
+                    let title = scope == "workspace" ? "Workspace Question Overlay" : "Global Question Profile"
+                    QuestionProfileDetailView(
+                        title: title,
+                        profile: profile,
+                        onOpenPath: onOpenPath,
+                        onClose: { presentedModal = nil }
+                    )
+                }
             }
         }
     }
@@ -1331,7 +1445,7 @@ struct DashboardRootView: View {
                         SyncMetricButton(
                             label: writeTargetLabels[key] ?? key,
                             value: snapshot.lastSyncDelta.writesCountByTarget[key] ?? 0,
-                            action: { selectedSyncTarget = key }
+                            action: { presentedModal = .syncTarget(key) }
                         )
                     }
                 }
@@ -1365,6 +1479,101 @@ struct DashboardRootView: View {
                     .lineLimit(2)
             }
         }
+    }
+
+    private func questionProfileCard(snapshot: DashboardSnapshot) -> some View {
+        DashboardCard(title: "Question Profile", symbol: "person.text.rectangle") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    StatusBadge(
+                        label: "Global",
+                        value: "\(snapshot.userQuestionProfile.snapshotCount)",
+                        color: snapshot.userQuestionProfile.snapshotCount > 0 ? .blue : .secondary
+                    )
+                    StatusBadge(
+                        label: "Workspace",
+                        value: "\(snapshot.userQuestionProfile.workspaceSnapshotCount)",
+                        color: snapshot.userQuestionProfile.workspaceSnapshotCount > 0 ? .mint : .secondary
+                    )
+                }
+                Text("Compiled from postflight-distilled user-question snapshots. The global profile captures stable cross-project preferences, and the workspace overlay keeps project-specific emphasis local.")
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 10) {
+                    questionProfilePreview(
+                        title: "Global",
+                        subtitle: "Cross-project questioning style",
+                        profile: snapshot.userQuestionProfile.globalProfile,
+                        tint: .blue,
+                        scope: "global"
+                    )
+                    questionProfilePreview(
+                        title: "Workspace",
+                        subtitle: "Project-specific overlay",
+                        profile: snapshot.userQuestionProfile.workspaceProfile,
+                        tint: .mint,
+                        scope: "workspace"
+                    )
+                }
+            }
+        }
+    }
+
+    private func questionProfilePreview(
+        title: String,
+        subtitle: String,
+        profile: QuestionProfileDocument,
+        tint: Color,
+        scope: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    Text(subtitle)
+                        .font(.system(size: 10, weight: .regular, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if !profile.updatedAt.isEmpty {
+                    Text(profile.updatedAt)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(profile.summary)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(profile.isPlaceholder ? .secondary : .primary)
+                .lineLimit(3)
+            Text(profile.preview.isEmpty ? "No additional distilled detail is available yet." : profile.preview)
+                .font(.system(size: 10, weight: .regular, design: .rounded))
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+            HStack(spacing: 8) {
+                Button("View") {
+                    presentedModal = .questionProfile(scope)
+                }
+                .buttonStyle(.bordered)
+
+                if !profile.path.isEmpty {
+                    Button("Open File") {
+                        onOpenPath(profile.path)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(tint.opacity(0.16), lineWidth: 1)
+                )
+        )
     }
 
     private func recentActivityCard(snapshot: DashboardSnapshot) -> some View {
