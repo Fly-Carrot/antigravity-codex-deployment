@@ -78,9 +78,12 @@ class BootstrapVSCodeWorkspaceTests(unittest.TestCase):
 
             self.assertTrue((workspace / "AGENTS.md").exists())
             self.assertTrue((workspace / ".vscode" / "tasks.json").exists())
+            self.assertTrue((workspace / ".agents" / "sync" / "user-question-profile.md").exists())
             self.assertEqual(summary["runtimes"], ["codex", "gemini"])
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
             self.assertEqual(settings["context"]["fileName"], ["AGENTS.md", "GEMINI.md"])
+            agents = (workspace / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("@./.agents/sync/user-question-profile.md", agents)
 
     def test_bootstrap_workspace_codex_only_skips_gemini_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -98,6 +101,7 @@ class BootstrapVSCodeWorkspaceTests(unittest.TestCase):
             )
 
             self.assertTrue((workspace / "AGENTS.md").exists())
+            self.assertTrue((workspace / ".agents" / "sync" / "user-question-profile.md").exists())
             self.assertEqual(summary["gemini_settings"], "")
             tasks = json.loads((workspace / ".vscode" / "tasks.json").read_text(encoding="utf-8"))
             input_ids = [item["id"] for item in tasks["inputs"]]

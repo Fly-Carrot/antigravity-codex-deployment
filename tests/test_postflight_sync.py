@@ -14,6 +14,15 @@ class PostflightSyncTests(unittest.TestCase):
             root = Path(tmpdir)
             workspace = root / "workspace"
             workspace.mkdir()
+            question_profile = {
+                "focus_points": ["System boundaries and failure modes"],
+                "question_patterns": ["Starts by testing architectural limits"],
+                "response_preferences": ["Wants concise but structurally clear answers"],
+                "reasoning_preferences": ["Prefers ambiguity pruned before execution"],
+                "recurring_themes": ["Cross-runtime memory consistency"],
+                "frictions_or_anxieties": ["Worries that silent breakage will hide in the sync path"],
+                "raw_prompts": ["should not be persisted"],
+            }
 
             result = subprocess.run(
                 [
@@ -51,6 +60,8 @@ class PostflightSyncTests(unittest.TestCase):
                     "gemini",
                     "--context-entrypoint",
                     "AGENTS.md",
+                    "--user-question-profile-json",
+                    json.dumps(question_profile, ensure_ascii=False),
                 ],
                 check=True,
                 capture_output=True,
@@ -64,7 +75,11 @@ class PostflightSyncTests(unittest.TestCase):
             self.assertEqual(payload["writes"]["open_loops"], 1)
             self.assertEqual(payload["writes"]["mempalace_records"], 1)
             self.assertEqual(payload["writes"]["promoted_learnings"], 1)
+            self.assertEqual(payload["writes"]["user_question_profiles"], 1)
             self.assertEqual(payload["learned_items"][0], "Learning receipts show exactly what changed")
+            self.assertTrue(payload["user_question_profile_target"].endswith("user-question-profiles.ndjson"))
+            self.assertIn("workspace_profile", payload["compiled_user_question_outputs"])
+            self.assertIn("global_skill", payload["compiled_user_question_outputs"])
 
             learning_records = (root / "sync" / "learning_receipts.ndjson").read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(learning_records), 1)
@@ -84,6 +99,15 @@ class PostflightSyncTests(unittest.TestCase):
             self.assertEqual(promoted["bridge_mode"], "handoff")
             mempalace = json.loads((root / "memory" / "mempalace-records.ndjson").read_text(encoding="utf-8").splitlines()[0])
             self.assertEqual(mempalace["mechanism"], "mempalace")
+            question_snapshot = json.loads((root / "memory" / "user-question-profiles.ndjson").read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(question_snapshot["type"], "user_question_profile_snapshot")
+            self.assertNotIn("raw_prompts", question_snapshot)
+            self.assertEqual(question_snapshot["questioning_dna"]["starting_lenses"], ["risks", "scope"])
+            workspace_profile = (workspace / ".agents" / "sync" / "user-question-profile.md").read_text(encoding="utf-8")
+            self.assertIn("Workspace User Question Profile", workspace_profile)
+            self.assertIn("System boundaries and failure modes", workspace_profile)
+            global_skill = (root / "skills" / "generated" / "user-questioning-profile" / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("Auto-generated profile of the primary user's questioning habits", global_skill)
 
     def test_postflight_dry_run_surfaces_learning_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -115,6 +139,7 @@ class PostflightSyncTests(unittest.TestCase):
             self.assertEqual(payload["status_marker"], "[SYNC_DRY_RUN]")
             self.assertIn("learning_receipt", payload)
             self.assertFalse((root / "sync" / "learning_receipts.ndjson").exists())
+            self.assertFalse((root / "memory" / "user-question-profiles.ndjson").exists())
 
 
 if __name__ == "__main__":

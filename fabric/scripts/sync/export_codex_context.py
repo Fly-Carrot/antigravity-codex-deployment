@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from path_config import resolve_global_root, resolve_workspace
+from user_question_profiles import GLOBAL_PROFILE_RELATIVE_PATH, WORKSPACE_PROFILE_RELATIVE_PATH
 
 
 def load_ndjson(path: Path) -> list[dict[str, Any]]:
@@ -53,6 +54,9 @@ def main() -> int:
         path = overlay_root / rel
         if path.exists():
             local_files.append(str(path))
+    workspace_profile_path = args.workspace / WORKSPACE_PROFILE_RELATIVE_PATH
+    if workspace_profile_path.exists():
+        local_files.append(str(workspace_profile_path))
 
     decisions = latest_records(load_ndjson(global_memory / "decision-log.ndjson"), args.limit)
     open_loops = latest_records(load_ndjson(global_memory / "open-loops.ndjson"), args.limit)
@@ -85,6 +89,11 @@ def main() -> int:
     lines.extend(["", "## Global Memory Profile", ""])
     profile = args.global_root / "memory" / "profile.md"
     lines.append(read_text(profile) if profile.exists() else "_Missing_")
+    lines.extend(["", "## Global User Question Profile", ""])
+    user_profile = args.global_root / GLOBAL_PROFILE_RELATIVE_PATH
+    lines.append(read_text(user_profile) if user_profile.exists() else "_Missing_")
+    lines.extend(["", "## Workspace User Question Profile", ""])
+    lines.append(read_text(workspace_profile_path) if workspace_profile_path.exists() else "_Missing_")
     lines.extend(["", "## Global Workflow Snapshots", ""])
     lines.extend(bullets([f"- {path}" for path in map(str, workflows[: args.limit])]))
     lines.extend(["", "## Recent Decisions", ""])

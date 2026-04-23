@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from path_config import resolve_global_root, resolve_path
+from user_question_profiles import WORKSPACE_PROFILE_RELATIVE_PATH, ensure_workspace_profile_stub
 
 MANAGED_MARKER = "<!-- managed-by: global-agent-fabric bootstrap_gemini_workspace.py -->"
 SETTINGS_MANAGED_BY = "global-agent-fabric"
@@ -268,6 +269,7 @@ def render_workspace_agents(project: dict[str, Any], workspace: Path) -> str:
         "## Workspace Imports",
         "",
     ]
+    lines.append(relative_import(workspace, workspace / WORKSPACE_PROFILE_RELATIVE_PATH))
     overlay_rules = [Path(item) for item in project.get("overlay_rules", [])]
     if overlay_rules:
         for overlay in overlay_rules:
@@ -328,6 +330,7 @@ def bootstrap_workspace(
     write_settings(gemini_settings, settings)
 
     agents_path = workspace / "AGENTS.md"
+    ensure_workspace_profile_stub(workspace)
     write_workspace_agents(agents_path, render_workspace_agents(project, workspace))
 
     return {

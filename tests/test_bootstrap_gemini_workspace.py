@@ -124,6 +124,7 @@ class BootstrapGeminiWorkspaceTests(unittest.TestCase):
             }
             content = module.render_workspace_agents(project, workspace)
             self.assertIn('@./.agents/rules/ecology.md', content)
+            self.assertIn('@./.agents/sync/user-question-profile.md', content)
             self.assertIn('codex-context.md', content)
 
     def test_write_workspace_agents_refuses_unmanaged_file(self) -> None:
@@ -153,6 +154,7 @@ class BootstrapGeminiWorkspaceTests(unittest.TestCase):
 
             self.assertFalse(summary['registered'])
             self.assertTrue((workspace / 'AGENTS.md').exists())
+            self.assertTrue((workspace / '.agents' / 'sync' / 'user-question-profile.md').exists())
             settings = json.loads(settings_path.read_text(encoding='utf-8'))
             self.assertEqual(settings['context']['fileName'], ['AGENTS.md', 'GEMINI.md'])
 

@@ -213,6 +213,7 @@ def bootstrap_workspace(
         registry = gemini_bootstrap.parse_project_registry(global_root / "projects" / "registry.yaml")
         project = gemini_bootstrap.resolve_workspace_project(registry, workspace)
         agents_path = workspace / "AGENTS.md"
+        gemini_bootstrap.ensure_workspace_profile_stub(workspace)
         gemini_bootstrap.write_workspace_agents(
             agents_path,
             gemini_bootstrap.render_workspace_agents(project, workspace),

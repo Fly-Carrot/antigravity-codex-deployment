@@ -32,38 +32,40 @@ if [[ ! -f "$STATIC_ICON_SVG" ]]; then
   exit 1
 fi
 
-sips -s format png "$STATIC_ICON_SVG" --out "$MASTER_ICON_PNG" >/dev/null
-
-for pair in \
-  "16:icon_16x16.png" \
-  "32:icon_16x16@2x.png" \
-  "32:icon_32x32.png" \
-  "64:icon_32x32@2x.png" \
-  "128:icon_128x128.png" \
-  "256:icon_128x128@2x.png" \
-  "256:icon_256x256.png" \
-  "512:icon_256x256@2x.png" \
-  "512:icon_512x512.png" \
-  "1024:icon_512x512@2x.png"
-do
-  size="${pair%%:*}"
-  name="${pair#*:}"
-  sips -z "$size" "$size" "$MASTER_ICON_PNG" --out "$ICONSET_DIR/$name" >/dev/null
-done
-
-cp "$ICONSET_DIR/icon_512x512@2x.png" "$ICON_PNG"
-rm -f "$ICON_FILE"
-if ! iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"; then
-  echo "warning: iconutil could not build SharedFabricDashboard.icns; trying TIFF fallback" >&2
-  find "$ICON_TIFF_DIR" -type f -delete
-  for png in "$ICONSET_DIR"/*.png; do
-    base="$(basename "$png" .png)"
-    sips -s format tiff "$png" --out "$ICON_TIFF_DIR/$base.tiff" >/dev/null
+if sips -s format png "$STATIC_ICON_SVG" --out "$MASTER_ICON_PNG" >/dev/null; then
+  for pair in \
+    "16:icon_16x16.png" \
+    "32:icon_16x16@2x.png" \
+    "32:icon_32x32.png" \
+    "64:icon_32x32@2x.png" \
+    "128:icon_128x128.png" \
+    "256:icon_128x128@2x.png" \
+    "256:icon_256x256.png" \
+    "512:icon_256x256@2x.png" \
+    "512:icon_512x512.png" \
+    "1024:icon_512x512@2x.png"
+  do
+    size="${pair%%:*}"
+    name="${pair#*:}"
+    sips -z "$size" "$size" "$MASTER_ICON_PNG" --out "$ICONSET_DIR/$name" >/dev/null
   done
-  tiffutil -cat "$ICON_TIFF_DIR"/*.tiff -out "$ICON_TIFF_FILE" >/dev/null
-  if ! tiff2icns "$ICON_TIFF_FILE" "$ICON_FILE"; then
-    echo "warning: tiff2icns fallback also failed; runtime PNG icon fallback will be used" >&2
+
+  cp "$ICONSET_DIR/icon_512x512@2x.png" "$ICON_PNG"
+  rm -f "$ICON_FILE"
+  if ! iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"; then
+    echo "warning: iconutil could not build SharedFabricDashboard.icns; trying TIFF fallback" >&2
+    find "$ICON_TIFF_DIR" -type f -delete
+    for png in "$ICONSET_DIR"/*.png; do
+      base="$(basename "$png" .png)"
+      sips -s format tiff "$png" --out "$ICON_TIFF_DIR/$base.tiff" >/dev/null
+    done
+    tiffutil -cat "$ICON_TIFF_DIR"/*.tiff -out "$ICON_TIFF_FILE" >/dev/null
+    if ! tiff2icns "$ICON_TIFF_FILE" "$ICON_FILE"; then
+      echo "warning: tiff2icns fallback also failed; runtime PNG icon fallback will be used" >&2
+    fi
   fi
+else
+  echo "warning: could not rasterize $STATIC_ICON_SVG with sips; keeping any existing bundle icon assets" >&2
 fi
 
 if [[ -d "$ASSETS_DIR" ]]; then

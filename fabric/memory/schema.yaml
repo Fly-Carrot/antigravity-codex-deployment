@@ -51,6 +51,26 @@ shared_logs:
       - artifacts
       - pending_actions
       - context_refs
+  user_question_profiles:
+    purpose: "Distilled snapshots of the primary user's questioning patterns, concerns, and response preferences."
+    required:
+      - timestamp
+      - agent
+      - workspace
+      - task_id
+      - summary
+      - focus_points
+      - question_patterns
+      - response_preferences
+      - reasoning_preferences
+      - recurring_themes
+      - frictions_or_anxieties
+    recommended:
+      - details
+      - artifacts
+      - questioning_dna
+      - bundle_version
+      - type
 memory_tracks:
   stable_technical_route:
     primary_mechanism: "cc-skill-continuous-learning"
