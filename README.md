@@ -4,7 +4,7 @@ Shared Fabric is a setup-first shared memory and synchronization layer for runni
 
 The desktop app in this repository is still called **Shared Fabric Dashboard**, but the public product story for `v3.1.0` now centers the real pairing: **Codex + Gemini**, not the earlier Antigravity experiments that this repo name grew out of.
 
-[Download v3.1.0](https://github.com/Fly-Carrot/antigravity-codex-deployment/releases/tag/v3.1.0) · [Release Notes](docs/releases/v3.1.0.md) · [Desktop App Source](tools/compact_dashboard_desktop/)
+[Download v3.1.0](https://github.com/Fly-Carrot/shared-fabric-codex-gemini/releases/tag/v3.1.0) · [Release Notes](docs/releases/v3.1.0.md) · [Desktop App Source](tools/compact_dashboard_desktop/)
 
 ![Shared Fabric Dashboard desktop app](docs/assets/dashboard-app-window.png)
 
