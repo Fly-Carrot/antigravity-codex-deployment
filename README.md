@@ -5,11 +5,18 @@
 </p>
 
 <h3 align="center">Personal AI Memory Console for Codex and Gemini</h3>
+<h3 align="center">面向 Codex 与 Gemini 的个人 AI 记忆控制台</h3>
 
 <p align="center">
   Shared Fabric Dashboard gives CLI agents a durable memory system, exact task visibility, and a clean desktop observer.
   <br/>
   It works well with <strong>one runtime</strong>, and gets even better when Codex and Gemini share the same fabric.
+</p>
+
+<p align="center">
+  Shared Fabric Dashboard 为 CLI agent 提供持久记忆、精确任务可视化，以及干净的桌面观察界面。
+  <br/>
+  它在<strong>单一 runtime</strong>下就已经很好用，而当 Codex 与 Gemini 共享同一套 fabric 时会更强。
 </p>
 
 <p align="center">
@@ -22,16 +29,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Fly-Carrot/shared-fabric-codex-gemini/releases/tag/v3.1.1">Download v3.1.1</a>
+  <a href="https://github.com/Fly-Carrot/shared-fabric-codex-gemini/releases/tag/v3.1.1">Download v3.1.1 / 下载 v3.1.1</a>
   ·
-  <a href="docs/releases/v3.1.1.md">Release Notes</a>
+  <a href="docs/releases/v3.1.1.md">Release Notes / 发布说明</a>
   ·
-  <a href="tools/compact_dashboard_desktop/">Desktop App Source</a>
+  <a href="tools/compact_dashboard_desktop/">Desktop App Source / 桌面 App 源码</a>
 </p>
 
 ![Shared Fabric Dashboard desktop app](docs/assets/dashboard-app-window.png)
 
-## Why This Exists
+## Why This Exists | 为什么做这个
 
 Most agent setups still lose context between sessions, hide what actually synced, and make memory quality hard to inspect.
 
@@ -43,7 +50,17 @@ Shared Fabric Dashboard solves that with one canonical shared fabric root:
 
 This repository is the portable deployment snapshot for that workflow. Your live memory does **not** live here. It lives in the `global-agent-fabric` root you choose during setup.
 
-## What You Actually Get
+大多数 agent 工作流仍然会在会话之间丢失上下文，难以确认到底同步了什么，也很难检查记忆质量。
+
+Shared Fabric Dashboard 用一个 canonical shared fabric root 来解决这件事：
+
+- 只用 `Codex`，也能获得持久项目记忆、提问画像蒸馏与 phase 可视化
+- 只用 `Gemini CLI`，也能获得同样的 boot、sync、memory 与 dashboard 能力
+- 两者一起使用时，则可以读写同一套结构化共享记忆
+
+这个仓库是这套工作流的可移植部署快照。你的实时记忆**不**存放在这里，而是存放在你 setup 时选择的 `global-agent-fabric` 根目录中。
+
+## What You Actually Get | 你实际会得到什么
 
 - **Shared memory lanes**: `Decision`, `Handoff`, `Mem`, `Loop`, `Learn`, and `Receipt`
 - **Question Profile**: a distilled global user profile plus workspace overlay
@@ -51,57 +68,81 @@ This repository is the portable deployment snapshot for that workflow. Your live
 - **Desktop observer**: session health, phase, sync delta, project memory, recent activity, and setup assistant
 - **Obsidian export**: manual export of readable Codex and Gemini chat history into your vault
 
-## Feature Tour
+- **共享记忆板块**：`Decision`、`Handoff`、`Mem`、`Loop`、`Learn`、`Receipt`
+- **Question Profile**：全局用户画像蒸馏，以及当前 workspace 的覆盖层
+- **六阶段任务追踪**：`route -> plan -> review -> dispatch -> execute -> report`
+- **桌面观察台**：session health、phase、sync delta、project memory、recent activity 与 setup assistant
+- **Obsidian 导出**：可将可读的 Codex 与 Gemini 聊天记录手动导入你的 vault
 
-### 1. Session Health
+## Feature Tour | 功能导览
+
+### 1. Session Health | 会话健康状态
 
 ![Session card](docs/assets/dashboard-session-card.png)
 
 See the active runtime, task id, workspace path, boot status, sync status, and audit health in one place.
 
-### 2. Exact Phase Tracking
+在一张卡片里查看当前 runtime、task id、workspace 路径、boot 状态、sync 状态和 audit 健康度。
+
+### 2. Exact Phase Tracking | 精确阶段追踪
 
 ![Phase card](docs/assets/dashboard-phase-card.png)
 
 Track real six-stage progress from canonical phase logs instead of guessing from chat output.
 
-### 3. Latest Sync Audit
+直接依据 canonical phase logs 追踪真实的六阶段进度，而不是靠聊天内容去猜。
+
+### 3. Latest Sync Audit | 最新同步审计
 
 ![Sync Delta card](docs/assets/dashboard-sync-delta-card.png)
 
 Inspect what the latest postflight actually wrote, lane by lane, without opening raw ndjson files.
 
-### 4. User Question Profile
+无需打开原始 ndjson 文件，就能逐板块查看最新一次 postflight 实际写入了什么。
+
+### 4. User Question Profile | 用户提问画像
 
 ![Question Profile card](docs/assets/dashboard-question-profile-card.png)
 
 Carry forward how the user tends to ask, what they care about, and how they prefer answers to be framed.
 
-### 5. Cumulative Project Memory
+把用户通常如何提问、关心什么、偏好怎样的回答结构持续蒸馏并带入后续任务。
+
+### 5. Cumulative Project Memory | 累积项目记忆
 
 ![Project Memory card](docs/assets/dashboard-project-memory-card.png)
 
 Browse the growing project memory timeline rather than just the newest sync receipt.
 
-### 6. Setup Assistant
+浏览不断增长的项目记忆时间线，而不是只看最新一条 sync receipt。
+
+### 6. Setup Assistant | 初始化向导
 
 ![Setup Assistant](docs/assets/dashboard-setup-assistant.png)
 
 Stand up a clean shared fabric root and enable a workspace without leaving the app.
 
-## Setup
+不用离开 app，就能初始化一个干净的 shared fabric root，并为 workspace 启用这套规则。
 
-### 1. Create the shared storage root
+## Setup | 安装与接入
+
+### 1. Create the shared storage root | 创建共享存储根目录
 
 From the desktop app, open the setup assistant.
 
+可以直接从桌面 app 打开 setup assistant。
+
 Or use the CLI:
+
+或者使用 CLI：
 
 ```bash
 python3 install/bootstrap_shared_fabric.py
 ```
 
 For non-interactive setup:
+
+如果你想无交互安装：
 
 ```bash
 python3 install/bootstrap_shared_fabric.py \
@@ -112,7 +153,9 @@ python3 install/bootstrap_shared_fabric.py \
 
 This creates the shared directory skeleton, renders local config, installs the portable snapshot, and runs the doctor chain.
 
-### 2. Enable a workspace
+这一步会创建共享目录骨架、渲染本地配置、安装可移植快照，并跑一遍 doctor 校验链。
+
+### 2. Enable a workspace | 为一个 workspace 启用这套规则
 
 ```bash
 python3 install/bootstrap_vscode_workspace.py \
@@ -123,12 +166,21 @@ python3 install/bootstrap_vscode_workspace.py \
 
 This generates:
 
+这一步会生成：
+
 - project-root `AGENTS.md`
 - `.vscode/tasks.json`
 - Gemini compatibility settings for `AGENTS.md` and `GEMINI.md`
 - `.agents/sync/user-question-profile.md`
 
+- 项目根目录的 `AGENTS.md`
+- `.vscode/tasks.json`
+- 兼容 `AGENTS.md` 与 `GEMINI.md` 的 Gemini 设置
+- `.agents/sync/user-question-profile.md`
+
 The generated VSCode task surface includes:
+
+自动注入的 VSCode task 包括：
 
 - `Shared Fabric: Boot Current Workspace`
 - `Shared Fabric: Sync Current Workspace`
@@ -136,9 +188,11 @@ The generated VSCode task surface includes:
 - `Shared Fabric: Open Global Root`
 - `Shared Fabric: Rebuild Workspace Entry`
 
-## Recommended Startup Snippet
+## Recommended Startup Snippet | 推荐启动 Snippet
 
 Use a workspace-adjusted version of this in your runtime instructions:
+
+把下面这段按你的 workspace 路径调整后，放进 runtime 指令中即可：
 
 ```text
 Use /path/to/global-agent-fabric as the canonical shared fabric.
@@ -162,7 +216,7 @@ If the active postflight_sync.py does not support user-question-profile distilla
 A task is not fully synced unless postflight includes a user-question-profile distillation payload for substantial work.
 ```
 
-## Shared Memory Model
+## Shared Memory Model | 共享记忆模型
 
 | Board | Purpose |
 | --- | --- |
@@ -173,9 +227,20 @@ A task is not fully synced unless postflight includes a user-question-profile di
 | `Learn` | Stable reusable lessons and promoted learnings |
 | `Receipt` | Sync audit records, counts, provenance, and cross-links |
 
+| 板块 | 作用 |
+| --- | --- |
+| `Decision` | 记录选定方案、架构决策与用户确认的方向 |
+| `Handoff` | 记录当前状态、已完成内容与明确的下一步动作 |
+| `Mem` | 记录试错过程、思考路径与细腻的理由 |
+| `Loop` | 记录阻塞项、未决风险与剩余工作 |
+| `Learn` | 记录稳定可复用的经验与 promoted learnings |
+| `Receipt` | 记录同步审计、计数、来源与交叉引用 |
+
 `Question Profile` is additive. It is not a seventh lane. It is a compiled distilled layer generated from substantial-task postflight snapshots.
 
-## Repository Layout
+`Question Profile` 是附加层，不是第七条 lane。它是由 substantial task 的 postflight 快照编译出来的蒸馏层。
+
+## Repository Layout | 仓库结构
 
 ```text
 shared-fabric-repo/
@@ -192,9 +257,14 @@ shared-fabric-repo/
     compact_dashboard_desktop/
 ```
 
-## Notes
+## Notes | 备注
 
 - The app bundle is still named `Shared Fabric Dashboard`.
 - The canonical shared state lives in your chosen `global-agent-fabric` root, not in this repository.
 - VSCode integration is intentionally workspace-first rather than extension-first.
 - Historical bridge metadata is still readable for compatibility, but it is treated as provenance rather than a primary control surface.
+
+- app bundle 名称目前仍然是 `Shared Fabric Dashboard`
+- canonical shared state 存在你选择的 `global-agent-fabric` 根目录里，而不是这个仓库里
+- VSCode 接入是刻意采用 workspace-first，而不是 extension-first
+- 历史 bridge metadata 仍然可读以保持兼容，但现在更被视作 provenance，而不是主控制面
