@@ -14,6 +14,7 @@ def main() -> int:
     parser.add_argument("--workspace", type=str, default=None)
     parser.add_argument("--global-root", type=str, default=None)
     parser.add_argument("--gemini-settings", type=str, default=None)
+    parser.add_argument("--snapshot-mode", choices=["full", "summary"], default="full")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
@@ -21,6 +22,7 @@ def main() -> int:
         workspace=args.workspace,
         global_root=args.global_root,
         gemini_settings=args.gemini_settings,
+        snapshot_mode=args.snapshot_mode,
     ).to_snapshot()
     payload = json.dumps(snapshot, ensure_ascii=False, indent=2)
 

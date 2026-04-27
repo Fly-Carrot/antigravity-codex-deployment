@@ -222,6 +222,7 @@ struct UserQuestionProfileState: Codable {
 struct DashboardSnapshot: Codable {
     let workspace: String
     let workspaceMode: String
+    let snapshotMode: String
     let projectName: String
     let runtime: String
     let bridgeSessionId: String
@@ -246,6 +247,8 @@ struct DashboardSnapshot: Codable {
     let alerts: [String]
     let lastSyncDelta: SyncDelta
     let userQuestionProfile: UserQuestionProfileState
+    let includesProjectMemoryDetails: Bool
+    let includesQuestionProfileContent: Bool
     let projectMemoryCounts: [String: Int]
     let projectMemoryRecords: [ProjectMemoryRecord]
     let projectMemoryLastUpdated: String
@@ -256,6 +259,7 @@ struct DashboardSnapshot: Codable {
     enum CodingKeys: String, CodingKey {
         case workspace
         case workspaceMode = "workspace_mode"
+        case snapshotMode = "snapshot_mode"
         case projectName = "project_name"
         case runtime
         case bridgeSessionId = "bridge_session_id"
@@ -280,6 +284,8 @@ struct DashboardSnapshot: Codable {
         case alerts
         case lastSyncDelta = "last_sync_delta"
         case userQuestionProfile = "user_question_profile"
+        case includesProjectMemoryDetails = "includes_project_memory_details"
+        case includesQuestionProfileContent = "includes_question_profile_content"
         case projectMemoryCounts = "project_memory_counts"
         case projectMemoryRecords = "project_memory_records"
         case projectMemoryLastUpdated = "project_memory_last_updated"
@@ -290,6 +296,7 @@ struct DashboardSnapshot: Codable {
 }
 
 let defaultGlobalRoot = "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+let defaultObsidianVaultRoot = "/Users/david_chen/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian Memory"
 let phaseOrder = ["route", "plan", "review", "dispatch", "execute", "report"]
 let phaseLabels = [
     "route": "Route",
@@ -319,6 +326,8 @@ final class DashboardPreferences: ObservableObject {
         static let pinnedWorkspace = "shared_fabric_dashboard.pinned_workspace"
         static let refreshInterval = "shared_fabric_dashboard.refresh_interval"
         static let globalRootOverride = "shared_fabric_dashboard.global_root_override"
+        static let obsidianVaultRoot = "shared_fabric_dashboard.obsidian_vault_root"
+        static let obsidianChatHistoryOutputDir = "shared_fabric_dashboard.obsidian_chat_history_output_dir"
     }
 
     private let defaults: UserDefaults
@@ -347,12 +356,22 @@ final class DashboardPreferences: ObservableObject {
         didSet { persistIfNeeded() }
     }
 
+    @Published var obsidianVaultRoot: String {
+        didSet { persistIfNeeded() }
+    }
+
+    @Published var obsidianChatHistoryOutputDir: String {
+        didSet { persistIfNeeded() }
+    }
+
     init(config: DashboardConfig, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.workspaceMode = .auto
         self.pinnedWorkspace = ""
         self.refreshInterval = 2.0
         self.globalRootOverride = ""
+        self.obsidianVaultRoot = ""
+        self.obsidianChatHistoryOutputDir = "Agent Chat History"
 
         if let storedMode = defaults.string(forKey: Keys.workspaceMode), let mode = WorkspaceMode(rawValue: storedMode) {
             workspaceMode = mode
@@ -361,6 +380,9 @@ final class DashboardPreferences: ObservableObject {
         let storedRefresh = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = storedRefresh > 0 ? storedRefresh : 2.0
         globalRootOverride = defaults.string(forKey: Keys.globalRootOverride) ?? ""
+        obsidianVaultRoot = defaults.string(forKey: Keys.obsidianVaultRoot) ?? ""
+        let storedOutputDir = defaults.string(forKey: Keys.obsidianChatHistoryOutputDir) ?? ""
+        obsidianChatHistoryOutputDir = storedOutputDir.isEmpty ? "Agent Chat History" : storedOutputDir
 
         if let initialWorkspace = config.initialWorkspace, !initialWorkspace.isEmpty {
             workspaceMode = .pinned
@@ -369,17 +391,32 @@ final class DashboardPreferences: ObservableObject {
         if let initialGlobalRoot = config.initialGlobalRoot, !initialGlobalRoot.isEmpty, globalRootOverride.isEmpty {
             globalRootOverride = initialGlobalRoot
         }
+        if obsidianVaultRoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           FileManager.default.fileExists(atPath: defaultObsidianVaultRoot)
+        {
+            obsidianVaultRoot = defaultObsidianVaultRoot
+        }
 
         isLoading = false
         persistIfNeeded()
     }
 
-    init(workspaceMode: WorkspaceMode, pinnedWorkspace: String, refreshInterval: Double, globalRootOverride: String, defaults: UserDefaults = .standard) {
+    init(
+        workspaceMode: WorkspaceMode,
+        pinnedWorkspace: String,
+        refreshInterval: Double,
+        globalRootOverride: String,
+        obsidianVaultRoot: String,
+        obsidianChatHistoryOutputDir: String,
+        defaults: UserDefaults = .standard
+    ) {
         self.defaults = defaults
         self.workspaceMode = workspaceMode
         self.pinnedWorkspace = pinnedWorkspace
         self.refreshInterval = max(1.0, min(refreshInterval, 60.0))
         self.globalRootOverride = globalRootOverride
+        self.obsidianVaultRoot = obsidianVaultRoot
+        self.obsidianChatHistoryOutputDir = obsidianChatHistoryOutputDir.isEmpty ? "Agent Chat History" : obsidianChatHistoryOutputDir
         isLoading = false
     }
 
@@ -389,6 +426,8 @@ final class DashboardPreferences: ObservableObject {
             pinnedWorkspace: pinnedWorkspace,
             refreshInterval: refreshInterval,
             globalRootOverride: globalRootOverride,
+            obsidianVaultRoot: obsidianVaultRoot,
+            obsidianChatHistoryOutputDir: obsidianChatHistoryOutputDir,
             defaults: defaults
         )
     }
@@ -407,6 +446,8 @@ final class DashboardPreferences: ObservableObject {
         pinnedWorkspace = config.initialWorkspace ?? ""
         refreshInterval = 2.0
         globalRootOverride = config.initialGlobalRoot ?? ""
+        obsidianVaultRoot = FileManager.default.fileExists(atPath: defaultObsidianVaultRoot) ? defaultObsidianVaultRoot : ""
+        obsidianChatHistoryOutputDir = "Agent Chat History"
     }
 
     var effectiveWorkspaceArgument: String? {
@@ -420,12 +461,24 @@ final class DashboardPreferences: ObservableObject {
         return trimmed.isEmpty ? defaultGlobalRoot : trimmed
     }
 
+    var effectiveObsidianVaultRoot: String? {
+        let trimmed = obsidianVaultRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var effectiveObsidianChatHistoryOutputDir: String {
+        let trimmed = obsidianChatHistoryOutputDir.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Agent Chat History" : trimmed
+    }
+
     private func persistIfNeeded() {
         guard !isLoading else { return }
         defaults.set(workspaceMode.rawValue, forKey: Keys.workspaceMode)
         defaults.set(pinnedWorkspace, forKey: Keys.pinnedWorkspace)
         defaults.set(refreshInterval, forKey: Keys.refreshInterval)
         defaults.set(globalRootOverride, forKey: Keys.globalRootOverride)
+        defaults.set(obsidianVaultRoot, forKey: Keys.obsidianVaultRoot)
+        defaults.set(effectiveObsidianChatHistoryOutputDir, forKey: Keys.obsidianChatHistoryOutputDir)
     }
 }
 
@@ -624,6 +677,9 @@ struct SyncMetricButton: View {
 struct DashboardSettingsView: View {
     @ObservedObject var preferences: DashboardPreferences
     let onChoosePinnedWorkspace: () -> Void
+    let onChooseObsidianVaultRoot: () -> Void
+    let onExportAgentChatHistoryNow: () -> Void
+    let onExportAllKnownWorkspaces: () -> Void
     let onResetDefaults: () -> Void
 
     var body: some View {
@@ -678,13 +734,35 @@ struct DashboardSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Obsidian Agent Chat History")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                HStack(spacing: 8) {
+                    TextField(defaultObsidianVaultRoot, text: $preferences.obsidianVaultRoot)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Choose…", action: onChooseObsidianVaultRoot)
+                }
+                TextField("Agent Chat History", text: $preferences.obsidianChatHistoryOutputDir)
+                    .textFieldStyle(.roundedBorder)
+                Text("Manual only: use Export Now or the File/menu bar action to write the latest Codex and Gemini workspace transcripts into your Obsidian vault. Re-export overwrites the same session file.")
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    Button("Export All", action: onExportAllKnownWorkspaces)
+                        .disabled((preferences.effectiveObsidianVaultRoot ?? "").isEmpty)
+                    Button("Export Now", action: onExportAgentChatHistoryNow)
+                        .disabled((preferences.effectiveObsidianVaultRoot ?? "").isEmpty)
+                }
+            }
+
             HStack {
                 Button("Reset Defaults", action: onResetDefaults)
                 Spacer()
             }
         }
         .padding(20)
-        .frame(width: 460)
+        .frame(width: 520)
     }
 }
 
@@ -1148,11 +1226,11 @@ struct ProjectMemoryBrowserView: View {
         let target = record.targetRuntime.trimmingCharacters(in: .whitespacesAndNewlines)
         switch (origin.isEmpty, target.isEmpty) {
         case (false, false):
-            return "\(origin.capitalized) -> \(target.capitalized)"
+            return "\(origin) -> \(target)"
         case (false, true):
-            return origin.capitalized
+            return origin
         case (true, false):
-            return target.capitalized
+            return target
         default:
             return "Cross-runtime"
         }
@@ -1161,14 +1239,11 @@ struct ProjectMemoryBrowserView: View {
 
 enum DashboardModal: Identifiable {
     case syncTarget(String)
-    case questionProfile(String)
 
     var id: String {
         switch self {
         case .syncTarget(let key):
             return "sync-\(key)"
-        case .questionProfile(let scope):
-            return "profile-\(scope)"
         }
     }
 }
@@ -1236,6 +1311,7 @@ struct DashboardRootView: View {
     let onOpenSettings: () -> Void
     let onOpenSetup: () -> Void
     let onOpenProjectMemory: (String?) -> Void
+    let onOpenQuestionProfile: (String) -> Void
     let onFollowLatestWorkspace: () -> Void
     let onSelectWorkspace: (String) -> Void
     let onPreviousWorkspace: () -> Void
@@ -1291,17 +1367,6 @@ struct DashboardRootView: View {
                     SyncRecordsDetailView(
                         title: "\(label) Details",
                         records: snapshot.lastSyncDelta.records.filter { $0.target == targetKey },
-                        onOpenPath: onOpenPath,
-                        onClose: { presentedModal = nil }
-                    )
-                case .questionProfile(let scope):
-                    let profile = scope == "workspace"
-                        ? snapshot.userQuestionProfile.workspaceProfile
-                        : snapshot.userQuestionProfile.globalProfile
-                    let title = scope == "workspace" ? "Workspace Question Overlay" : "Global Question Profile"
-                    QuestionProfileDetailView(
-                        title: title,
-                        profile: profile,
                         onOpenPath: onOpenPath,
                         onClose: { presentedModal = nil }
                     )
@@ -1552,7 +1617,7 @@ struct DashboardRootView: View {
                 .lineLimit(4)
             HStack(spacing: 8) {
                 Button("View") {
-                    presentedModal = .questionProfile(scope)
+                    onOpenQuestionProfile(scope)
                 }
                 .buttonStyle(.bordered)
 
@@ -1721,34 +1786,48 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         let workspace: String?
         let globalRoot: String
         let geminiSettings: String?
+        let snapshotMode: String
     }
 
     private let config: DashboardConfig
     let preferences: DashboardPreferences
     private let viewModel = DashboardViewModel()
     private let onClose: (FloatingDashboardController) -> Void
+    private let onSnapshotUpdate: (FloatingDashboardController) -> Void
 
     private var panel: NSWindow!
     private var settingsWindow: NSWindow?
     private var setupWindow: NSWindow?
     private var setupViewModel: SetupAssistantViewModel?
     private var projectMemoryWindow: NSWindow?
+    private var questionProfileWindow: NSWindow?
     private var refreshTimer: Timer?
     private var refreshTask: Task<Void, Never>?
+    private var chatHistoryExportTask: Task<Void, Never>?
     private var pendingRefresh = false
     private var refreshSequence = 0
     private var cancellables = Set<AnyCancellable>()
 
-    init(config: DashboardConfig, preferences: DashboardPreferences, onClose: @escaping (FloatingDashboardController) -> Void) {
+    init(
+        config: DashboardConfig,
+        preferences: DashboardPreferences,
+        onClose: @escaping (FloatingDashboardController) -> Void,
+        onSnapshotUpdate: @escaping (FloatingDashboardController) -> Void
+    ) {
         self.config = config
         self.preferences = preferences
         self.onClose = onClose
+        self.onSnapshotUpdate = onSnapshotUpdate
         super.init()
         observePreferences()
     }
 
     var window: NSWindow? {
         panel
+    }
+
+    var currentSnapshot: DashboardSnapshot? {
+        viewModel.snapshot
     }
 
     func start() {
@@ -1771,13 +1850,21 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
             projectMemoryWindow = nil
             return
         }
+        if let closed = notification.object as? NSWindow, closed === questionProfileWindow {
+            questionProfileWindow = nil
+            return
+        }
         refreshTimer?.invalidate()
         refreshTask?.cancel()
+        chatHistoryExportTask?.cancel()
         refreshTask = nil
+        chatHistoryExportTask = nil
         pendingRefresh = false
         settingsWindow?.close()
         setupWindow?.close()
         projectMemoryWindow?.close()
+        questionProfileWindow?.close()
+        onSnapshotUpdate(self)
         onClose(self)
     }
 
@@ -1827,6 +1914,9 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         let rootView = DashboardSettingsView(
             preferences: preferences,
             onChoosePinnedWorkspace: { [weak self] in self?.choosePinnedWorkspace() },
+            onChooseObsidianVaultRoot: { [weak self] in self?.chooseObsidianVaultRoot() },
+            onExportAgentChatHistoryNow: { [weak self] in self?.exportAgentChatHistoryNow(force: true) },
+            onExportAllKnownWorkspaces: { [weak self] in self?.exportAllKnownWorkspaceChatHistory() },
             onResetDefaults: { [weak self] in
                 guard let self else { return }
                 self.preferences.resetToDefaults(config: self.config)
@@ -1834,7 +1924,7 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         )
         let hosting = NSHostingView(rootView: rootView)
         let window = NSWindow(
-            contentRect: NSRect(x: 280, y: 280, width: 480, height: 280),
+            contentRect: NSRect(x: 280, y: 280, width: 540, height: 420),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -1900,13 +1990,116 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
     }
 
     func openProjectMemoryWindow(initialLane: String?) {
-        guard let snapshot = viewModel.snapshot else { return }
         if let projectMemoryWindow {
             projectMemoryWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        loadDetailedSnapshot { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let snapshot):
+                self.presentProjectMemoryWindow(snapshot: snapshot, initialLane: initialLane)
+            case .failure(let error):
+                self.viewModel.apply(error: error)
+            }
+        }
+    }
 
+    func openQuestionProfileWindow(scope: String) {
+        loadDetailedSnapshot { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let snapshot):
+                let profile = scope == "workspace"
+                    ? snapshot.userQuestionProfile.workspaceProfile
+                    : snapshot.userQuestionProfile.globalProfile
+                let title = scope == "workspace" ? "Workspace Question Overlay" : "Global Question Profile"
+                self.presentQuestionProfileWindow(title: title, profile: profile)
+            case .failure(let error):
+                self.viewModel.apply(error: error)
+            }
+        }
+    }
+
+    private func observePreferences() {
+        preferences.objectWillChange
+            .sink { [weak self] in
+                DispatchQueue.main.async {
+                    self?.preferencesDidChange()
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func preferencesDidChange() {
+        resetRefreshTimer()
+        refresh()
+    }
+
+    private func resetRefreshTimer() {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: effectiveRefreshInterval(), repeats: false) { [weak self] _ in
+            self?.refresh()
+            self?.resetRefreshTimer()
+        }
+    }
+
+    private func effectiveRefreshInterval() -> TimeInterval {
+        let base = max(1.0, preferences.refreshInterval)
+        let isForegroundWindow = (panel?.isVisible ?? false) && !(panel?.isMiniaturized ?? false) && NSApp.isActive
+        return isForegroundWindow ? base : max(15.0, base * 6.0)
+    }
+
+    private func currentWorkspacePath() -> String? {
+        let snapshotWorkspace = viewModel.snapshot?.workspace.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !snapshotWorkspace.isEmpty {
+            return snapshotWorkspace
+        }
+        return preferences.effectiveWorkspaceArgument
+    }
+
+    private func choosePinnedWorkspace() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select Workspace"
+        if panel.runModal() == .OK, let url = panel.url {
+            preferences.setPinned(url.path)
+        }
+    }
+
+    private func chooseObsidianVaultRoot() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select Obsidian Vault"
+        if panel.runModal() == .OK, let url = panel.url {
+            preferences.obsidianVaultRoot = url.path
+        }
+    }
+
+    private func closeProjectMemoryWindow() {
+        projectMemoryWindow?.close()
+        projectMemoryWindow = nil
+    }
+
+    private func closeQuestionProfileWindow() {
+        questionProfileWindow?.close()
+        questionProfileWindow = nil
+    }
+
+    private func closeSetupWindow() {
+        setupWindow?.close()
+        setupWindow = nil
+        setupViewModel = nil
+    }
+
+    private func presentProjectMemoryWindow(snapshot: DashboardSnapshot, initialLane: String?) {
         let rootView = ProjectMemoryBrowserView(
             snapshot: snapshot,
             initialLane: initialLane,
@@ -1930,57 +2123,30 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func observePreferences() {
-        preferences.objectWillChange
-            .sink { [weak self] in
-                DispatchQueue.main.async {
-                    self?.preferencesDidChange()
-                }
-            }
-            .store(in: &cancellables)
-    }
+    private func presentQuestionProfileWindow(title: String, profile: QuestionProfileDocument) {
+        closeQuestionProfileWindow()
 
-    private func preferencesDidChange() {
-        resetRefreshTimer()
-        refresh()
-    }
-
-    private func resetRefreshTimer() {
-        refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: preferences.refreshInterval, repeats: true) { [weak self] _ in
-            self?.refresh()
-        }
-    }
-
-    private func currentWorkspacePath() -> String? {
-        let snapshotWorkspace = viewModel.snapshot?.workspace.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !snapshotWorkspace.isEmpty {
-            return snapshotWorkspace
-        }
-        return preferences.effectiveWorkspaceArgument
-    }
-
-    private func choosePinnedWorkspace() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Select Workspace"
-        if panel.runModal() == .OK, let url = panel.url {
-            preferences.setPinned(url.path)
-        }
-    }
-
-    private func closeProjectMemoryWindow() {
-        projectMemoryWindow?.close()
-        projectMemoryWindow = nil
-    }
-
-    private func closeSetupWindow() {
-        setupWindow?.close()
-        setupWindow = nil
-        setupViewModel = nil
+        let rootView = QuestionProfileDetailView(
+            title: title,
+            profile: profile,
+            onOpenPath: { [weak self] path in self?.openPath(path) },
+            onClose: { [weak self] in self?.closeQuestionProfileWindow() }
+        )
+        let hosting = NSHostingView(rootView: rootView)
+        let window = NSWindow(
+            contentRect: NSRect(x: 360, y: 280, width: 660, height: 500),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = title
+        window.contentView = hosting
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        questionProfileWindow = window
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func cycleWorkspace(step: Int) {
@@ -2019,6 +2185,7 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
             onOpenSettings: { [weak self] in self?.openSettingsWindow() },
             onOpenSetup: { [weak self] in self?.openSetupWindow() },
             onOpenProjectMemory: { [weak self] lane in self?.openProjectMemoryWindow(initialLane: lane) },
+            onOpenQuestionProfile: { [weak self] scope in self?.openQuestionProfileWindow(scope: scope) },
             onFollowLatestWorkspace: { [weak self] in self?.followLatestWorkspace() },
             onSelectWorkspace: { [weak self] path in self?.selectWorkspace(path) },
             onPreviousWorkspace: { [weak self] in self?.selectPreviousWorkspace() },
@@ -2082,20 +2249,137 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
                     let projectTitle = snapshot.projectName.trimmingCharacters(in: .whitespacesAndNewlines)
                     self.panel.title = projectTitle.isEmpty ? "Shared Fabric Dashboard" : "Shared Fabric Dashboard · \(projectTitle)"
                     self.viewModel.apply(snapshot: snapshot)
+                    self.onSnapshotUpdate(self)
                 case .failure(let error):
                     self.viewModel.apply(error: error)
+                    self.onSnapshotUpdate(self)
                 }
             }
         }
     }
 
-    private func makeSnapshotRequest() -> SnapshotRequest {
+    private func makeSnapshotRequest(snapshotMode: String = "summary") -> SnapshotRequest {
         SnapshotRequest(
             script: config.snapshotScript,
             workspace: preferences.effectiveWorkspaceArgument,
             globalRoot: preferences.effectiveGlobalRoot,
-            geminiSettings: config.geminiSettings?.isEmpty == false ? config.geminiSettings : nil
+            geminiSettings: config.geminiSettings?.isEmpty == false ? config.geminiSettings : nil,
+            snapshotMode: snapshotMode
         )
+    }
+
+    private func loadDetailedSnapshot(completion: @escaping (Result<DashboardSnapshot, Error>) -> Void) {
+        let request = makeSnapshotRequest(snapshotMode: "full")
+        Task.detached(priority: .userInitiated) {
+            let result = Result { try Self.loadSnapshot(request: request) }
+            await MainActor.run {
+                completion(result)
+            }
+        }
+    }
+
+    func exportAgentChatHistoryNow(force: Bool) {
+        guard let snapshot = viewModel.snapshot else { return }
+        guard let vaultRoot = preferences.effectiveObsidianVaultRoot else { return }
+        guard let repoRoot = config.repositoryRoot else { return }
+        let script = URL(fileURLWithPath: repoRoot).appendingPathComponent("tools/compact_dashboard/export_agent_chat_history.py").path
+        let workspace = snapshot.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !workspace.isEmpty else { return }
+
+        chatHistoryExportTask?.cancel()
+        chatHistoryExportTask = Task.detached(priority: .utility) { [weak self] in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = [
+                "python3",
+                script,
+                "--workspace",
+                workspace,
+                "--vault-root",
+                vaultRoot,
+                "--output-dir",
+                self?.preferences.effectiveObsidianChatHistoryOutputDir ?? "Agent Chat History",
+                "--runtime",
+                "both",
+            ]
+            let stdout = Pipe()
+            let stderr = Pipe()
+            process.standardOutput = stdout
+            process.standardError = stderr
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus != 0 {
+                    let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+                    let message = String(data: errorData, encoding: .utf8) ?? "agent chat history export failed"
+                    await MainActor.run { [weak self] in
+                        self?.viewModel.apply(error: NSError(domain: "FloatingDashboard", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: message]))
+                    }
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.viewModel.apply(error: error)
+                }
+            }
+        }
+    }
+
+    func exportAllKnownWorkspaceChatHistory() {
+        guard let snapshot = viewModel.snapshot else { return }
+        guard let vaultRoot = preferences.effectiveObsidianVaultRoot else { return }
+        guard let repoRoot = config.repositoryRoot else { return }
+        let script = URL(fileURLWithPath: repoRoot).appendingPathComponent("tools/compact_dashboard/export_agent_chat_history.py").path
+
+        var workspacePaths = snapshot.availableWorkspaces.map(\.path)
+        let currentWorkspace = snapshot.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !currentWorkspace.isEmpty, !workspacePaths.contains(currentWorkspace) {
+            workspacePaths.insert(currentWorkspace, at: 0)
+        }
+        workspacePaths = Array(NSOrderedSet(array: workspacePaths)) as? [String] ?? workspacePaths
+        workspacePaths = workspacePaths.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !workspacePaths.isEmpty else { return }
+
+        chatHistoryExportTask?.cancel()
+        chatHistoryExportTask = Task.detached(priority: .utility) { [weak self] in
+            for workspace in workspacePaths {
+                guard !Task.isCancelled else { return }
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                process.arguments = [
+                    "python3",
+                    script,
+                    "--workspace",
+                    workspace,
+                    "--vault-root",
+                    vaultRoot,
+                    "--output-dir",
+                    self?.preferences.effectiveObsidianChatHistoryOutputDir ?? "Agent Chat History",
+                    "--runtime",
+                    "both",
+                ]
+                let stdout = Pipe()
+                let stderr = Pipe()
+                process.standardOutput = stdout
+                process.standardError = stderr
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    if process.terminationStatus != 0 {
+                        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+                        let message = String(data: errorData, encoding: .utf8) ?? "agent chat history export failed"
+                        await MainActor.run { [weak self] in
+                            self?.viewModel.apply(error: NSError(domain: "FloatingDashboard", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "\(workspace): \(message)"]))
+                        }
+                        return
+                    }
+                } catch {
+                    await MainActor.run { [weak self] in
+                        self?.viewModel.apply(error: error)
+                    }
+                    return
+                }
+            }
+        }
     }
 
     private static func loadSnapshot(request: SnapshotRequest) throws -> DashboardSnapshot {
@@ -2110,6 +2394,7 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         if let geminiSettings = request.geminiSettings {
             arguments += ["--gemini-settings", geminiSettings]
         }
+        arguments += ["--snapshot-mode", request.snapshotMode]
         process.arguments = arguments
 
         let fileManager = FileManager.default
@@ -2325,6 +2610,7 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
 
     private let config: DashboardConfig
     private var controllers: [FloatingDashboardController] = []
+    private var statusItem: NSStatusItem?
 
     init(config: DashboardConfig) {
         self.config = config
@@ -2334,6 +2620,7 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         installAppIcon()
         installMenus()
+        installStatusItem()
         openNewWindow()
         performInitialSetupCheckIfNeeded()
     }
@@ -2359,24 +2646,31 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         openNewWindow(seed: activeController()?.preferences.cloned())
     }
 
+    @objc func showDashboardWindow(_ sender: Any?) {
+        guard let controller = ensureController() else { return }
+        controller.window?.makeKeyAndOrderFront(nil)
+        controllers.compactMap(\.window).forEach { $0.makeKeyAndOrderFront(nil) }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc func showSettings(_ sender: Any?) {
-        activeController()?.openSettingsWindow()
+        ensureController()?.openSettingsWindow()
     }
 
     @objc func showSetupAssistant(_ sender: Any?) {
-        activeController()?.openSetupWindow()
+        ensureController()?.openSetupWindow()
     }
 
     @objc func browseProjectMemory(_ sender: Any?) {
-        activeController()?.openProjectMemoryWindow(initialLane: nil)
+        ensureController()?.openProjectMemoryWindow(initialLane: nil)
     }
 
     @objc func refreshCurrent(_ sender: Any?) {
-        activeController()?.refreshNow()
+        ensureController()?.refreshNow()
     }
 
     @objc func followLatestWorkspace(_ sender: Any?) {
-        activeController()?.followLatestWorkspace()
+        ensureController()?.followLatestWorkspace()
     }
 
     @objc func previousWorkspace(_ sender: Any?) {
@@ -2393,6 +2687,14 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
 
     @objc func openSharedFabricSync(_ sender: Any?) {
         activeController()?.openSyncFolder()
+    }
+
+    @objc func exportAgentChatHistory(_ sender: Any?) {
+        ensureController()?.exportAgentChatHistoryNow(force: true)
+    }
+
+    @objc func exportAllAgentChatHistory(_ sender: Any?) {
+        ensureController()?.exportAllKnownWorkspaceChatHistory()
     }
 
     @objc func showAbout(_ sender: Any?) {
@@ -2416,13 +2718,30 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         return controllers.last
     }
 
+    private func ensureController() -> FloatingDashboardController? {
+        if let controller = activeController() {
+            return controller
+        }
+        openNewWindow()
+        return controllers.last
+    }
+
     private func openNewWindow(seed: DashboardPreferences? = nil) {
         let preferences = seed ?? DashboardPreferences(config: config)
-        let controller = FloatingDashboardController(config: config, preferences: preferences) { [weak self] closed in
-            self?.controllers.removeAll(where: { $0 === closed })
-        }
+        let controller = FloatingDashboardController(
+            config: config,
+            preferences: preferences,
+            onClose: { [weak self] closed in
+                self?.controllers.removeAll(where: { $0 === closed })
+                self?.refreshStatusItem()
+            },
+            onSnapshotUpdate: { [weak self] _ in
+                self?.refreshStatusItem()
+            }
+        )
         controllers.append(controller)
         controller.start()
+        refreshStatusItem()
     }
 
     private func performInitialSetupCheckIfNeeded() {
@@ -2515,6 +2834,79 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func installStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
+            if let image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: "Shared Fabric Dashboard") {
+                image.isTemplate = true
+                button.image = image
+                button.imagePosition = .imageLeft
+            } else {
+                button.image = nil
+            }
+            button.title = " Fabric"
+            button.toolTip = "Shared Fabric Dashboard"
+        }
+        statusItem = item
+        refreshStatusItem()
+    }
+
+    private func refreshStatusItem() {
+        guard let statusItem else { return }
+        let menu = NSMenu()
+
+        func menuAction(_ title: String, action: Selector, enabled: Bool = true) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = enabled
+            return item
+        }
+
+        func infoItem(_ title: String) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            return item
+        }
+
+        let snapshot = activeController()?.currentSnapshot ?? controllers.last?.currentSnapshot
+        if let button = statusItem.button {
+            if let snapshot {
+                let shortProject = snapshot.projectName == "(no workspace)" ? "Shared Fabric" : snapshot.projectName
+                button.toolTip = "\(shortProject) · \(snapshot.runtime.uppercased()) · \(snapshot.lifecyclePhase)"
+                let marker = snapshot.lifecyclePhase == "SYNCED" ? "●" : (snapshot.lifecyclePhase == "ACTIVE" ? "◐" : "○")
+                button.title = " \(marker) Fabric"
+            } else {
+                button.toolTip = "Shared Fabric Dashboard"
+                button.title = " Fabric"
+            }
+        }
+
+        menu.addItem(infoItem("Shared Fabric Dashboard"))
+        if let snapshot {
+            let phaseTitle = phaseLabels[snapshot.sixStageCurrent] ?? (snapshot.sixStageCurrent.isEmpty ? "Idle" : snapshot.sixStageCurrent.capitalized)
+            menu.addItem(infoItem("\(snapshot.projectName) · \(snapshot.lifecyclePhase)"))
+            menu.addItem(infoItem("\(snapshot.runtime.uppercased()) · \(phaseTitle)"))
+            if !snapshot.workspace.isEmpty {
+                menu.addItem(infoItem(snapshot.workspace))
+            }
+        } else {
+            menu.addItem(infoItem("No active dashboard snapshot yet"))
+        }
+        menu.addItem(.separator())
+        menu.addItem(menuAction("Open Dashboard", action: #selector(showDashboardWindow(_:))))
+        menu.addItem(menuAction("Refresh Current Window", action: #selector(refreshCurrent(_:)), enabled: activeController() != nil))
+        menu.addItem(menuAction("Browse Project Memory", action: #selector(browseProjectMemory(_:)), enabled: activeController()?.currentSnapshot != nil))
+        menu.addItem(menuAction("Export Agent Chat History", action: #selector(exportAgentChatHistory(_:)), enabled: activeController()?.currentSnapshot != nil))
+        menu.addItem(menuAction("Export All Known Workspaces", action: #selector(exportAllAgentChatHistory(_:)), enabled: activeController()?.currentSnapshot != nil))
+        menu.addItem(menuAction("Follow Latest Workspace", action: #selector(followLatestWorkspace(_:)), enabled: activeController() != nil))
+        menu.addItem(menuAction("Set Up Shared Fabric…", action: #selector(showSetupAssistant(_:))))
+        menu.addItem(menuAction("Open Shared Fabric Sync Folder", action: #selector(openSharedFabricSync(_:)), enabled: activeController() != nil))
+        menu.addItem(.separator())
+        menu.addItem(menuAction("Quit Shared Fabric Dashboard", action: #selector(NSApplication.terminate(_:))))
+
+        statusItem.menu = menu
+    }
+
     private func installMenus() {
         let mainMenu = NSMenu()
 
@@ -2551,6 +2943,8 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         fileMenu.addItem(targetedItem("Set Up Shared Fabric…", action: #selector(showSetupAssistant(_:)), key: "", modifiers: []))
         fileMenu.addItem(targetedItem("Open Current Workspace in Finder", action: #selector(openCurrentWorkspace(_:)), key: "o", modifiers: [.command, .shift]))
         fileMenu.addItem(targetedItem("Open Shared Fabric Sync Folder", action: #selector(openSharedFabricSync(_:)), key: "", modifiers: []))
+        fileMenu.addItem(targetedItem("Export Agent Chat History", action: #selector(exportAgentChatHistory(_:)), key: "e", modifiers: [.command, .shift]))
+        fileMenu.addItem(targetedItem("Export All Known Workspaces", action: #selector(exportAllAgentChatHistory(_:)), key: "e", modifiers: [.command, .option, .shift]))
         fileMenu.addItem(.separator())
         let closeWindowItem = NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         closeWindowItem.keyEquivalentModifierMask = [.command]

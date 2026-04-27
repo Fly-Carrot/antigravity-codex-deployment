@@ -134,6 +134,7 @@ class UserQuestionProfileState:
 class DashboardState:
     workspace: str
     workspace_mode: str
+    snapshot_mode: str
     project_name: str
     runtime: str
     bridge_session_id: str
@@ -158,6 +159,8 @@ class DashboardState:
     alerts: list[str]
     last_sync_delta: SyncDelta
     user_question_profile: UserQuestionProfileState
+    includes_project_memory_details: bool
+    includes_question_profile_content: bool
     project_memory_counts: dict[str, int]
     project_memory_records: list[ProjectMemoryRecord]
     project_memory_last_updated: str
@@ -351,6 +354,25 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _runtime_display_name(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    normalized = "".join(char for char in text.lower() if char.isalnum())
+    aliases = {
+        "codex": "Codex",
+        "codexcli": "Codex",
+        "gemini": "Gemini CLI",
+        "geminicli": "Gemini CLI",
+        "antigravity": "Gemini CLI",
+        "techlead": "Gemini CLI",
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    return text
+
+
 def _build_recent_tasks(workspace_receipts: list[dict[str, Any]], handoffs: list[dict[str, Any]]) -> list[dict[str, str]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for record in workspace_receipts:
@@ -377,7 +399,7 @@ def _build_recent_tasks(workspace_receipts: list[dict[str, Any]], handoffs: list
         recent.append(
             {
                 "task_id": task_id,
-                "agent": str(latest.get("agent") or "?"),
+                "agent": _runtime_display_name(latest.get("agent") or "?"),
                 "time": _parse_timestamp(latest.get("timestamp")).astimezone().strftime("%m-%d %H:%M"),
                 "boot": "OK" if boot_ok else "--",
                 "sync": "OK" if sync_ok else "..",
@@ -418,7 +440,13 @@ def _profile_updated_at(path: Path, content: str) -> str:
     return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
 
 
-def _question_profile_document(path: Path | None, *, title: str, missing_summary: str) -> QuestionProfileDocument:
+def _question_profile_document(
+    path: Path | None,
+    *,
+    title: str,
+    missing_summary: str,
+    include_content: bool,
+) -> QuestionProfileDocument:
     if path is None:
         return QuestionProfileDocument(
             title=title,
@@ -442,7 +470,7 @@ def _question_profile_document(path: Path | None, *, title: str, missing_summary
         title=title,
         summary=summary,
         preview=preview,
-        content=content.strip(),
+        content=content.strip() if include_content else "",
         path=str(path),
         updated_at=_profile_updated_at(path, content),
         is_available=path.exists(),
@@ -450,7 +478,12 @@ def _question_profile_document(path: Path | None, *, title: str, missing_summary
     )
 
 
-def _resolve_user_question_profile(*, global_root: Path, workspace_path: str) -> UserQuestionProfileState:
+def _resolve_user_question_profile(
+    *,
+    global_root: Path,
+    workspace_path: str,
+    include_content: bool,
+) -> UserQuestionProfileState:
     records = _read_ndjson(global_root / USER_QUESTION_PROFILE_LOG)
     workspace_records = [
         record for record in records if _normalize_path(record.get("workspace")) == workspace_path
@@ -463,11 +496,13 @@ def _resolve_user_question_profile(*, global_root: Path, workspace_path: str) ->
             global_root / GLOBAL_USER_QUESTION_PROFILE,
             title="Global Profile",
             missing_summary="No compiled global question profile yet.",
+            include_content=include_content,
         ),
         workspace_profile=_question_profile_document(
             workspace_profile_path,
             title="Workspace Overlay",
             missing_summary="No workspace question overlay is available yet.",
+            include_content=include_content,
         ),
     )
 
@@ -638,6 +673,8 @@ def _resolve_bridge_metadata(records: list[dict[str, Any]]) -> dict[str, Any]:
             value = str(record.get(key) or "").strip()
             if value:
                 fields[key] = value
+    fields["origin_runtime"] = _runtime_display_name(fields["origin_runtime"])
+    fields["target_runtime"] = _runtime_display_name(fields["target_runtime"])
     fields["is_bridged"] = any(bool(value) for value in fields.values())
     return fields
 
@@ -715,17 +752,18 @@ def _project_memory_entry(
     source_path: Path,
     record: dict[str, Any],
     bridge_metadata: dict[str, Any],
+    include_details: bool,
 ) -> ProjectMemoryRecord:
     return ProjectMemoryRecord(
         lane=lane,
         title=title,
         timestamp=str(record.get("timestamp") or ""),
         summary=str(record.get("summary") or record.get("source_summary") or ""),
-        details=str(record.get("details") or ""),
+        details=str(record.get("details") or "") if include_details else "",
         artifacts=[str(item) for item in record.get("artifacts") or [] if str(item).strip()],
         workspace=str(record.get("workspace") or ""),
         task_id=str(record.get("task_id") or ""),
-        agent=str(record.get("agent") or ""),
+        agent=_runtime_display_name(record.get("agent") or ""),
         type=str(record.get("type") or ""),
         source_path=str(source_path),
         route=str(record.get("route") or ""),
@@ -777,6 +815,8 @@ def _resolve_project_memory(
     mempalace_path: Path,
     promoted_learnings_path: Path,
     learning_receipts_path: Path,
+    include_details: bool,
+    max_records: int,
 ) -> tuple[dict[str, int], list[ProjectMemoryRecord], str]:
     sources = {
         "receipts": (learning_receipts_path, "Receipt"),
@@ -822,11 +862,12 @@ def _resolve_project_memory(
                     source_path=path,
                     record=record,
                     bridge_metadata=bridge_metadata,
+                    include_details=include_details,
                 )
             )
     records.sort(key=lambda item: _parse_timestamp(item.timestamp), reverse=True)
     last_updated = records[0].timestamp if records else ""
-    return counts, records[:120], last_updated
+    return counts, records[:max_records], last_updated
 
 
 def _resolve_sync_records(
@@ -1006,10 +1047,21 @@ def _resolve_sync_delta(
     )
 
 
-def build_state(workspace: str | Path | None = None, global_root: str | Path | None = None, gemini_settings: str | Path | None = None) -> DashboardState:
+def build_state(
+    workspace: str | Path | None = None,
+    global_root: str | Path | None = None,
+    gemini_settings: str | Path | None = None,
+    snapshot_mode: str = "full",
+) -> DashboardState:
     global_root_path = resolve_global_root(global_root)
     gemini_settings_path = resolve_gemini_settings(gemini_settings)
     workspace_mode = "auto" if _is_auto_workspace(workspace) else "pinned"
+    normalized_snapshot_mode = snapshot_mode.strip().lower() or "full"
+    if normalized_snapshot_mode not in {"full", "summary"}:
+        raise ValueError(f"unsupported snapshot mode: {snapshot_mode}")
+    include_project_memory_details = normalized_snapshot_mode == "full"
+    include_question_profile_content = normalized_snapshot_mode == "full"
+    project_memory_limit = 120 if normalized_snapshot_mode == "full" else 24
 
     receipts_path = global_root_path / "sync" / "receipts.ndjson"
     handoffs_path = global_root_path / "memory" / "handoffs.ndjson"
@@ -1046,7 +1098,7 @@ def build_state(workspace: str | Path | None = None, global_root: str | Path | N
     current_records = sorted(current_records, key=lambda item: _parse_timestamp(item.get("timestamp")))
     latest_record = current_records[-1] if current_records else {}
 
-    runtime = str(latest_record.get("agent") or "-")
+    runtime = _runtime_display_name(latest_record.get("agent") or "-")
     boot_status = "OK" if any(item.get("status_marker") == "[BOOT_OK]" for item in current_records) else "--"
     sync_status = "OK" if any(item.get("status_marker") == "[SYNC_OK]" for item in current_records) else "--"
 
@@ -1098,10 +1150,13 @@ def build_state(workspace: str | Path | None = None, global_root: str | Path | N
         mempalace_path=mempalace_path,
         promoted_learnings_path=promoted_learnings_path,
         learning_receipts_path=learning_receipts_path,
+        include_details=include_project_memory_details,
+        max_records=project_memory_limit,
     )
     user_question_profile = _resolve_user_question_profile(
         global_root=global_root_path,
         workspace_path=workspace_path,
+        include_content=include_question_profile_content,
     )
 
     settings_payload = {}
@@ -1139,6 +1194,7 @@ def build_state(workspace: str | Path | None = None, global_root: str | Path | N
     return DashboardState(
         workspace=workspace_path,
         workspace_mode=workspace_mode,
+        snapshot_mode=normalized_snapshot_mode,
         project_name=Path(workspace_path).name if workspace_path else "(no workspace)",
         runtime=runtime,
         bridge_session_id=str(bridge_metadata["bridge_session_id"]),
@@ -1163,6 +1219,8 @@ def build_state(workspace: str | Path | None = None, global_root: str | Path | N
         alerts=alerts,
         last_sync_delta=last_sync_delta,
         user_question_profile=user_question_profile,
+        includes_project_memory_details=include_project_memory_details,
+        includes_question_profile_content=include_question_profile_content,
         project_memory_counts=project_memory_counts,
         project_memory_records=project_memory_records,
         project_memory_last_updated=project_memory_last_updated,

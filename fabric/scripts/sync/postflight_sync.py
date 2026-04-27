@@ -49,7 +49,11 @@ def main() -> int:
     parser.add_argument("--origin-runtime")
     parser.add_argument("--target-runtime")
     parser.add_argument("--context-entrypoint")
-    parser.add_argument("--user-question-profile-json")
+    parser.add_argument(
+        "--user-question-profile-json",
+        "--user-question-profile-distillation",
+        dest="user_question_profile_json",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 

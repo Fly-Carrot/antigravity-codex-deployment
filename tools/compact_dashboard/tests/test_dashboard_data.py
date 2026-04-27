@@ -177,7 +177,7 @@ class DashboardDataTests(unittest.TestCase):
 
             self.assertEqual(state.project_name, "MCP_Hub")
             self.assertEqual(state.workspace_mode, "pinned")
-            self.assertEqual(state.runtime, "codex")
+            self.assertEqual(state.runtime, "Codex")
             self.assertEqual(state.lifecycle_phase, "SYNCED")
             self.assertEqual(state.task_id, "task-live")
             self.assertEqual(state.boot_status, "OK")
@@ -258,13 +258,13 @@ class DashboardDataTests(unittest.TestCase):
             self.assertTrue(state.is_bridged)
             self.assertEqual(state.bridge_session_id, "bridge-codex-to-gemini-demo")
             self.assertEqual(state.bridge_mode, "handoff")
-            self.assertEqual(state.origin_runtime, "codex")
-            self.assertEqual(state.target_runtime, "gemini")
+            self.assertEqual(state.origin_runtime, "Codex")
+            self.assertEqual(state.target_runtime, "Gemini CLI")
             bridge_handoff = next(item for item in state.project_memory_records if item.task_id == "task-bridge")
             self.assertTrue(bridge_handoff.is_bridged)
             self.assertEqual(bridge_handoff.bridge_session_id, "bridge-codex-to-gemini-demo")
-            self.assertEqual(bridge_handoff.origin_runtime, "codex")
-            self.assertEqual(bridge_handoff.target_runtime, "gemini")
+            self.assertEqual(bridge_handoff.origin_runtime, "Codex")
+            self.assertEqual(bridge_handoff.target_runtime, "Gemini CLI")
 
     def test_build_state_includes_user_question_profile_views(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -351,6 +351,106 @@ class DashboardDataTests(unittest.TestCase):
             self.assertIn("Starts from: risks", state.user_question_profile.global_profile.preview)
             self.assertEqual(state.user_question_profile.workspace_profile.summary, "Compiled from `1` distilled user-question snapshots across `1` workspace(s).")
             self.assertIn("Shared memory correctness", state.user_question_profile.workspace_profile.preview)
+
+    def test_build_state_summary_mode_defers_heavy_memory_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "MCP_Hub"
+            workspace.mkdir()
+            settings_path = self._base_fixture(root, workspace)
+            self._write(
+                root / "sync" / "receipts.ndjson",
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "status_marker": "[BOOT_OK]",
+                                "task_id": "task-light",
+                                "timestamp": "2026-04-22T01:00:00Z",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "status_marker": "[SYNC_OK]",
+                                "task_id": "task-light",
+                                "timestamp": "2026-04-22T01:05:00Z",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "decision-log.ndjson",
+                json.dumps(
+                    {
+                        "task_id": "task-light",
+                        "summary": "Adopt a lighter snapshot for steady-state refresh.",
+                        "details": "The main dashboard only needs summaries, counts, and previews; load full details on demand.",
+                        "timestamp": "2026-04-22T01:05:00Z",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "user-question-profiles.ndjson",
+                json.dumps(
+                    {
+                        "agent": "codex",
+                        "task_id": "task-light",
+                        "timestamp": "2026-04-22T01:05:00Z",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Global User Question Profile",
+                        "",
+                        "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+                        "Last updated: `2026-04-22T01:05:00Z`",
+                        "",
+                        "Starts from: risks and system boundaries.",
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                workspace / ".agents" / "sync" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Workspace User Question Profile",
+                        "",
+                        "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+                        "Last updated: `2026-04-22T01:05:00Z`",
+                        "",
+                        "Current project emphasis: dashboard responsiveness.",
+                    ]
+                )
+                + "\n",
+            )
+
+            state = build_state(
+                workspace=workspace,
+                global_root=root,
+                gemini_settings=settings_path,
+                snapshot_mode="summary",
+            )
+
+            self.assertEqual(state.snapshot_mode, "summary")
+            self.assertFalse(state.includes_project_memory_details)
+            self.assertFalse(state.includes_question_profile_content)
+            self.assertEqual(state.project_memory_records[0].details, "")
+            self.assertEqual(state.user_question_profile.global_profile.content, "")
+            self.assertIn("Starts from: risks", state.user_question_profile.global_profile.preview)
 
     def test_project_memory_prefers_rich_bundle_over_legacy_duplicate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -630,9 +730,35 @@ class DashboardDataTests(unittest.TestCase):
             self.assertEqual(Path(state.workspace), workspace_b.resolve())
             self.assertEqual(state.workspace_mode, "auto")
             self.assertEqual(state.project_name, "antigravity-codex-deployment")
-            self.assertEqual(state.runtime, "gemini")
+            self.assertEqual(state.runtime, "Gemini CLI")
             self.assertEqual(state.task_id, "task-b")
             self.assertIn("workspace source = auto", state.alerts)
+
+    def test_build_state_normalizes_techlead_alias_to_gemini_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "SNN Frame"
+            workspace.mkdir()
+            settings_path = self._base_fixture(root, workspace)
+            self._write(
+                root / "sync" / "receipts.ndjson",
+                json.dumps(
+                    {
+                        "agent": "TechLead",
+                        "status_marker": "[SYNC_OK]",
+                        "task_id": "session",
+                        "timestamp": "2026-04-23T05:05:53Z",
+                        "summary": "gemini-side sync complete",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+
+            state = build_state(workspace=workspace, global_root=root, gemini_settings=settings_path)
+
+            self.assertEqual(state.runtime, "Gemini CLI")
+            self.assertEqual(state.recent_tasks[0]["agent"], "Gemini CLI")
 
     def test_build_state_merges_active_and_registered_workspaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

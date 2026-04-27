@@ -141,6 +141,48 @@ class PostflightSyncTests(unittest.TestCase):
             self.assertFalse((root / "sync" / "learning_receipts.ndjson").exists())
             self.assertFalse((root / "memory" / "user-question-profiles.ndjson").exists())
 
+    def test_postflight_accepts_legacy_user_question_profile_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            question_profile = {
+                "focus_points": ["Runtime-facing compatibility"],
+                "question_patterns": ["Checks exact CLI contracts"],
+                "response_preferences": ["Wants the fix to be backward compatible"],
+                "reasoning_preferences": ["Prefers root-cause fixes over prompt-only patches"],
+                "recurring_themes": ["Shared-fabric reliability"],
+                "frictions_or_anxieties": ["Dislikes misleading sync warnings"],
+            }
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--global-root",
+                    str(root),
+                    "--workspace",
+                    str(workspace),
+                    "--agent",
+                    "techlead",
+                    "--task-id",
+                    "legacy-flag-test",
+                    "--summary",
+                    "legacy flag sync complete",
+                    "--user-question-profile-distillation",
+                    json.dumps(question_profile, ensure_ascii=False),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status_marker"], "[SYNC_OK]")
+            self.assertEqual(payload["writes"]["user_question_profiles"], 1)
+            question_snapshot = json.loads((root / "memory" / "user-question-profiles.ndjson").read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(question_snapshot["summary"], "Runtime-facing compatibility")
+
 
 if __name__ == "__main__":
     unittest.main()

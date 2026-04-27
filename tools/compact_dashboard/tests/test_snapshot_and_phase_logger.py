@@ -216,6 +216,135 @@ class SnapshotAndPhaseLoggerTests(unittest.TestCase):
             self.assertIn("project_memory_records", payload)
             self.assertEqual(payload["attention_state"], "healthy")
 
+    def test_export_snapshot_summary_mode_omits_heavy_dashboard_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "MCP_Hub"
+            workspace.mkdir()
+            self._write(
+                root / "sync" / "receipts.ndjson",
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "status_marker": "[BOOT_OK]",
+                                "task_id": "task-summary",
+                                "timestamp": "2026-04-22T01:00:00Z",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "status_marker": "[SYNC_OK]",
+                                "task_id": "task-summary",
+                                "timestamp": "2026-04-22T01:03:00Z",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "decision-log.ndjson",
+                json.dumps(
+                    {
+                        "task_id": "task-summary",
+                        "summary": "Use a summary snapshot for background refresh.",
+                        "details": "Project memory details stay available for on-demand browsing but should not inflate the steady-state dashboard payload.",
+                        "timestamp": "2026-04-22T01:03:00Z",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "user-question-profiles.ndjson",
+                json.dumps(
+                    {
+                        "agent": "codex",
+                        "task_id": "task-summary",
+                        "timestamp": "2026-04-22T01:03:00Z",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Global User Question Profile",
+                        "",
+                        "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+                        "Last updated: `2026-04-22T01:03:00Z`",
+                        "",
+                        "Starts from: implementation tradeoffs and failure modes.",
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                workspace / ".agents" / "sync" / "user-question-profile.md",
+                "\n".join(
+                    [
+                        "# Workspace User Question Profile",
+                        "",
+                        "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
+                        "Last updated: `2026-04-22T01:03:00Z`",
+                        "",
+                        "Current project emphasis: lighter desktop refresh paths.",
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                root / "mcp" / "servers.yaml",
+                "\n".join(
+                    [
+                        "version: 1",
+                        "servers:",
+                        "  -",
+                        '    id: "context7"',
+                        "    enabled: true",
+                        '    command: "/bin/true"',
+                        "    args: []",
+                        "    env_refs: []",
+                    ]
+                )
+                + "\n",
+            )
+            settings_path = root / "settings.json"
+            settings_path.write_text(json.dumps({"mcpServers": {"context7": {}}}), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(EXPORT_SNAPSHOT),
+                    "--workspace",
+                    str(workspace),
+                    "--global-root",
+                    str(root),
+                    "--gemini-settings",
+                    str(settings_path),
+                    "--snapshot-mode",
+                    "summary",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["snapshot_mode"], "summary")
+            self.assertFalse(payload["includes_project_memory_details"])
+            self.assertFalse(payload["includes_question_profile_content"])
+            self.assertEqual(payload["project_memory_records"][0]["details"], "")
+            self.assertEqual(payload["user_question_profile"]["global_profile"]["content"], "")
+            self.assertIn("Starts from: implementation tradeoffs", payload["user_question_profile"]["global_profile"]["preview"])
+
     def test_export_snapshot_auto_follows_latest_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -286,7 +415,7 @@ class SnapshotAndPhaseLoggerTests(unittest.TestCase):
             self.assertEqual(Path(payload["workspace"]), workspace_b.resolve())
             self.assertEqual(payload["workspace_mode"], "auto")
             self.assertEqual(payload["project_name"], "Project4")
-            self.assertEqual(payload["runtime"], "gemini")
+            self.assertEqual(payload["runtime"], "Gemini CLI")
 
     def test_export_snapshot_includes_available_workspaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -529,13 +658,13 @@ class SnapshotAndPhaseLoggerTests(unittest.TestCase):
             self.assertTrue(payload["is_bridged"])
             self.assertEqual(payload["bridge_session_id"], "bridge-codex-to-gemini-demo")
             self.assertEqual(payload["bridge_mode"], "handoff")
-            self.assertEqual(payload["origin_runtime"], "codex")
-            self.assertEqual(payload["target_runtime"], "gemini")
+            self.assertEqual(payload["origin_runtime"], "Codex")
+            self.assertEqual(payload["target_runtime"], "Gemini CLI")
             bridge_handoff = next(item for item in payload["project_memory_records"] if item["task_id"] == "task-bridge")
             self.assertTrue(bridge_handoff["is_bridged"])
             self.assertEqual(bridge_handoff["bridge_session_id"], "bridge-codex-to-gemini-demo")
-            self.assertEqual(bridge_handoff["origin_runtime"], "codex")
-            self.assertEqual(bridge_handoff["target_runtime"], "gemini")
+            self.assertEqual(bridge_handoff["origin_runtime"], "Codex")
+            self.assertEqual(bridge_handoff["target_runtime"], "Gemini CLI")
 
 
 if __name__ == "__main__":
