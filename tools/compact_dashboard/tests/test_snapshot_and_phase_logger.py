@@ -212,6 +212,11 @@ class SnapshotAndPhaseLoggerTests(unittest.TestCase):
                 payload["user_question_profile"]["global_profile"]["summary"],
                 "Compiled from `1` distilled user-question snapshots across `1` workspace(s).",
             )
+            self.assertIn("project_update_log", payload)
+            self.assertEqual(payload["project_update_log"]["preferred_language"], "en")
+            self.assertTrue(payload["project_update_log"]["is_available"])
+            self.assertIn("Recent Rounds", payload["project_update_log"]["content"])
+            self.assertIn("Validation and Evidence", payload["project_update_log"]["content"])
             self.assertIn("project_memory_counts", payload)
             self.assertIn("project_memory_records", payload)
             self.assertEqual(payload["attention_state"], "healthy")
@@ -343,6 +348,7 @@ class SnapshotAndPhaseLoggerTests(unittest.TestCase):
             self.assertFalse(payload["includes_question_profile_content"])
             self.assertEqual(payload["project_memory_records"][0]["details"], "")
             self.assertEqual(payload["user_question_profile"]["global_profile"]["content"], "")
+            self.assertEqual(payload["project_update_log"]["content"], "")
             self.assertIn("Starts from: implementation tradeoffs", payload["user_question_profile"]["global_profile"]["preview"])
 
     def test_export_snapshot_auto_follows_latest_workspace(self) -> None:

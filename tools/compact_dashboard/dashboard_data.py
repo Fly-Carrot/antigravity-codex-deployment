@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +46,12 @@ PROJECT_MEMORY_LABELS = {
     "mempalace_records": "Mem",
     "promoted_learnings": "Learn",
 }
+CANONICAL_TOP_LEVELS = [
+    "00 Raw Sources",
+    "10 Wiki",
+    "20 Queries and Reports",
+    "90 System",
+]
 USER_QUESTION_PROFILE_LOG = "memory/user-question-profiles.ndjson"
 GLOBAL_USER_QUESTION_PROFILE = "memory/user-question-profile.md"
 WORKSPACE_USER_QUESTION_PROFILE = ".agents/sync/user-question-profile.md"
@@ -131,6 +138,108 @@ class UserQuestionProfileState:
 
 
 @dataclass
+class ProjectUpdateLog:
+    title: str
+    summary: str
+    preview: str
+    content: str
+    updated_at: str
+    preferred_language: str
+    source_task_count: int
+    source_record_count: int
+    is_available: bool
+
+
+@dataclass
+class KnowledgeBaseOverview:
+    vault_root: str
+    is_configured: bool
+    is_normalized: bool
+    total_projects: int
+    active_workspaces: int
+    legacy_source_count: int
+    wiki_page_count: int
+    graph_node_count: int
+    graph_edge_count: int
+    last_built_at: str
+    summary: str
+
+
+@dataclass
+class KnowledgeProjectSummary:
+    name: str
+    slug: str
+    workspace: str
+    source: str
+    lifecycle_phase: str
+    runtime: str
+    last_updated: str
+    focus: str
+    page_count: int
+    has_wiki: bool
+    wiki_root: str
+
+
+@dataclass
+class LegacySourceEntry:
+    name: str
+    path: str
+    classification: str
+    status: str
+
+
+@dataclass
+class KnowledgeGraphNode:
+    id: str
+    label: str
+    kind: str
+    path: str
+    scope: str
+    workspace: str
+    status: str
+
+
+@dataclass
+class KnowledgeGraphEdge:
+    source: str
+    target: str
+    kind: str
+
+
+@dataclass
+class KnowledgeGraphMeta:
+    graph_path: str
+    node_count: int
+    edge_count: int
+    updated_at: str
+    is_available: bool
+
+
+@dataclass
+class ObserveRollup:
+    project_name: str
+    slug: str
+    workspace_count: int
+    latest_runtime: str
+    latest_sync_status: str
+    attention_state: str
+    latest_activity: str
+    latest_focus: str
+    open_loop_count: int
+    decision_count: int
+    learning_count: int
+    workspaces: list[str]
+
+
+@dataclass
+class SelectedScope:
+    kind: str
+    label: str
+    project_name: str
+    workspace: str
+
+
+@dataclass
 class DashboardState:
     workspace: str
     workspace_mode: str
@@ -159,6 +268,15 @@ class DashboardState:
     alerts: list[str]
     last_sync_delta: SyncDelta
     user_question_profile: UserQuestionProfileState
+    project_update_log: ProjectUpdateLog
+    knowledge_base_overview: KnowledgeBaseOverview
+    knowledge_projects: list[KnowledgeProjectSummary]
+    legacy_sources: list[LegacySourceEntry]
+    knowledge_graph_meta: KnowledgeGraphMeta
+    knowledge_graph_nodes: list[KnowledgeGraphNode]
+    knowledge_graph_edges: list[KnowledgeGraphEdge]
+    observe_rollups: list[ObserveRollup]
+    selected_scope: SelectedScope
     includes_project_memory_details: bool
     includes_question_profile_content: bool
     project_memory_counts: dict[str, int]
@@ -504,6 +622,810 @@ def _resolve_user_question_profile(
             missing_summary="No workspace question overlay is available yet.",
             include_content=include_content,
         ),
+    )
+
+
+def _count_cjk_characters(text: str) -> int:
+    total = 0
+    for ch in text:
+        if "\u4e00" <= ch <= "\u9fff" or "\u3400" <= ch <= "\u4dbf":
+            total += 1
+    return total
+
+
+def _detect_preferred_language(
+    *,
+    user_question_profile: UserQuestionProfileState,
+    last_handoff: str,
+    project_memory_records: list[ProjectMemoryRecord],
+) -> str:
+    candidate_text = "\n".join(
+        [
+            user_question_profile.workspace_profile.content,
+            user_question_profile.workspace_profile.summary,
+            user_question_profile.workspace_profile.preview,
+            user_question_profile.global_profile.content,
+            user_question_profile.global_profile.summary,
+            user_question_profile.global_profile.preview,
+            last_handoff,
+            "\n".join(record.summary for record in project_memory_records[:12]),
+        ]
+    )
+    lowered = candidate_text.lower()
+    cjk_count = _count_cjk_characters(candidate_text)
+    chinese_hints = lowered.count("中文") + lowered.count("chinese") + lowered.count("mandarin")
+    english_hints = lowered.count("英文") + lowered.count("english")
+    if cjk_count >= 12 or chinese_hints > english_hints:
+        return "zh"
+    return "en"
+
+
+def _group_project_memory_by_task(records: list[ProjectMemoryRecord]) -> list[tuple[str, list[ProjectMemoryRecord]]]:
+    grouped: list[tuple[str, list[ProjectMemoryRecord]]] = []
+    by_task: dict[str, list[ProjectMemoryRecord]] = {}
+    ordered_tasks: list[str] = []
+    for record in records:
+        task_id = record.task_id or "(no task id)"
+        if task_id not in by_task:
+            ordered_tasks.append(task_id)
+            by_task[task_id] = []
+        by_task[task_id].append(record)
+    for task_id in ordered_tasks:
+        grouped.append((task_id, by_task[task_id]))
+    return grouped
+
+
+def _format_update_log_record(record: ProjectMemoryRecord, preferred_language: str) -> list[str]:
+    lane_label = PROJECT_MEMORY_LABELS.get(record.lane, record.lane)
+    header = f"- [{record.timestamp or 'no time'}] [{lane_label}] {record.summary or '(no summary)'}"
+    lines = [header]
+    details = str(record.details or "").strip()
+    if details:
+        detail_lines = [line.strip() for line in details.splitlines() if line.strip()]
+        capped_lines = detail_lines[:8]
+        if preferred_language == "zh":
+            lines.append("  详细：")
+        else:
+            lines.append("  Details:")
+        for line in capped_lines:
+            lines.append(f"  - {line}")
+        if len(detail_lines) > len(capped_lines):
+            lines.append("  - ..." if preferred_language == "en" else "  - ……")
+    if record.artifacts:
+        artifact_label = "Artifacts" if preferred_language == "en" else "关联文件"
+        lines.append(f"  {artifact_label}:")
+        for artifact in record.artifacts[:5]:
+            lines.append(f"  - {artifact}")
+    return lines
+
+
+def _detail_excerpt(text: str, max_lines: int = 3) -> list[str]:
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return lines[:max_lines]
+
+
+def _collect_validation_notes(records: list[ProjectMemoryRecord], preferred_language: str) -> list[str]:
+    notes: list[str] = []
+    keywords = ("test", "unittest", "validated", "validation", "build", "py_compile", "snapshot", "compile")
+    seen: set[str] = set()
+    for record in reversed(records):
+        haystacks = [record.summary.lower(), record.details.lower()]
+        if not any(any(keyword in haystack for keyword in keywords) for haystack in haystacks):
+            continue
+        candidate = record.summary or ""
+        if candidate and candidate not in seen:
+            notes.append(candidate)
+            seen.add(candidate)
+        for excerpt in _detail_excerpt(record.details, max_lines=2):
+            if any(keyword in excerpt.lower() for keyword in keywords) and excerpt not in seen:
+                notes.append(excerpt)
+                seen.add(excerpt)
+        if len(notes) >= 6:
+            break
+    return notes
+
+
+def _task_section_lines(task_id: str, records: list[ProjectMemoryRecord], preferred_language: str) -> list[str]:
+    records_sorted = sorted(records, key=lambda item: _parse_timestamp(item.timestamp))
+    latest = records_sorted[-1]
+    started = records_sorted[0].timestamp or "unknown"
+    ended = latest.timestamp or "unknown"
+    by_lane: dict[str, list[ProjectMemoryRecord]] = {}
+    for record in records_sorted:
+        by_lane.setdefault(record.lane, []).append(record)
+
+    if preferred_language == "zh":
+        lines = [
+            f"### {task_id}",
+            f"- 时间范围：`{started}` -> `{ended}`",
+            f"- 记录条数：`{len(records_sorted)}`",
+        ]
+        latest_receipt = by_lane.get("receipts", [])
+        if latest_receipt:
+            lines.append(f"- 本轮摘要：{latest_receipt[-1].summary}")
+        latest_handoff = by_lane.get("handoffs", [])
+        if latest_handoff:
+            lines.append(f"- 交接状态：{latest_handoff[-1].summary}")
+        decisions = by_lane.get("decision_log", [])[-2:]
+        if decisions:
+            lines.append("- 关键决策：")
+            for record in decisions:
+                lines.append(f"  - {record.summary}")
+        learns = by_lane.get("promoted_learnings", [])[-2:]
+        if learns:
+            lines.append("- 学习沉淀：")
+            for record in learns:
+                lines.append(f"  - {record.summary}")
+        loops = by_lane.get("open_loops", [])[-2:]
+        if loops:
+            lines.append("- 未决项：")
+            for record in loops:
+                lines.append(f"  - {record.summary}")
+        detail_records = [record for record in records_sorted if record.details.strip()][-2:]
+        if detail_records:
+            lines.append("- 细节摘录：")
+            for record in detail_records:
+                lane_label = PROJECT_MEMORY_LABELS.get(record.lane, record.lane)
+                lines.append(f"  - [{lane_label}] {record.summary}")
+                for excerpt in _detail_excerpt(record.details, max_lines=2):
+                    lines.append(f"    - {excerpt}")
+    else:
+        lines = [
+            f"### {task_id}",
+            f"- Time range: `{started}` -> `{ended}`",
+            f"- Record count: `{len(records_sorted)}`",
+        ]
+        latest_receipt = by_lane.get("receipts", [])
+        if latest_receipt:
+            lines.append(f"- Round summary: {latest_receipt[-1].summary}")
+        latest_handoff = by_lane.get("handoffs", [])
+        if latest_handoff:
+            lines.append(f"- Handoff state: {latest_handoff[-1].summary}")
+        decisions = by_lane.get("decision_log", [])[-2:]
+        if decisions:
+            lines.append("- Key decisions:")
+            for record in decisions:
+                lines.append(f"  - {record.summary}")
+        learns = by_lane.get("promoted_learnings", [])[-2:]
+        if learns:
+            lines.append("- Durable learnings:")
+            for record in learns:
+                lines.append(f"  - {record.summary}")
+        loops = by_lane.get("open_loops", [])[-2:]
+        if loops:
+            lines.append("- Open items:")
+            for record in loops:
+                lines.append(f"  - {record.summary}")
+        detail_records = [record for record in records_sorted if record.details.strip()][-2:]
+        if detail_records:
+            lines.append("- Detail excerpts:")
+            for record in detail_records:
+                lane_label = PROJECT_MEMORY_LABELS.get(record.lane, record.lane)
+                lines.append(f"  - [{lane_label}] {record.summary}")
+                for excerpt in _detail_excerpt(record.details, max_lines=2):
+                    lines.append(f"    - {excerpt}")
+    lines.append("")
+    return lines
+
+
+def _project_update_log(
+    *,
+    project_name: str,
+    task_id: str,
+    last_handoff: str,
+    project_memory_counts: dict[str, int],
+    project_memory_records: list[ProjectMemoryRecord],
+    project_memory_last_updated: str,
+    user_question_profile: UserQuestionProfileState,
+    include_content: bool,
+) -> ProjectUpdateLog:
+    if not project_memory_records:
+        return ProjectUpdateLog(
+            title="Project Update Log",
+            summary="No project memory is available yet.",
+            preview="",
+            content="",
+            updated_at="",
+            preferred_language="en",
+            source_task_count=0,
+            source_record_count=0,
+            is_available=False,
+        )
+
+    preferred_language = _detect_preferred_language(
+        user_question_profile=user_question_profile,
+        last_handoff=last_handoff,
+        project_memory_records=project_memory_records,
+    )
+    chronological_records = sorted(project_memory_records, key=lambda item: _parse_timestamp(item.timestamp))
+    grouped_tasks = _group_project_memory_by_task(chronological_records)
+    recent_grouped_tasks = grouped_tasks[-8:]
+    distinct_task_count = len({record.task_id or "(no task id)" for record in project_memory_records})
+    nonzero_counts = [
+        f"{PROJECT_MEMORY_LABELS.get(lane, lane)} {count}"
+        for lane, count in project_memory_counts.items()
+        if count > 0
+    ]
+    top_summaries = [record.summary for record in chronological_records[-5:] if record.summary][-3:]
+    latest_open_loops = [record.summary for record in reversed(chronological_records) if record.lane == "open_loops" and record.summary][:4]
+    latest_learnings = [record.summary for record in reversed(chronological_records) if record.lane == "promoted_learnings" and record.summary][:4]
+    latest_decisions = [record.summary for record in reversed(chronological_records) if record.lane == "decision_log" and record.summary][:4]
+    validation_notes = _collect_validation_notes(chronological_records, preferred_language)
+
+    if preferred_language == "zh":
+        title = "项目更新日志"
+        summary = f"已根据 {distinct_task_count} 个任务与 {len(project_memory_records)} 条项目记忆自动整理，按时间连续展开。"
+        preview = "；".join(top_summaries) if top_summaries else "暂无可展示的近期更新。"
+        lines = [
+            f"# {title}",
+            "",
+            f"- 项目：`{project_name}`",
+            f"- 当前任务：`{task_id}`" if task_id and task_id != "-" else "- 当前任务：暂无",
+            f"- 最近更新时间：`{project_memory_last_updated}`" if project_memory_last_updated else "- 最近更新时间：暂无",
+            f"- 生成语言：`中文`",
+            f"- 来源任务数：`{distinct_task_count}`",
+            f"- 来源记录数：`{len(project_memory_records)}`",
+            "",
+            "## 总览",
+            f"- 自动依据现有 Project Memory 整理，而不是额外维护第二套手写日志。",
+            f"- 板块覆盖：{', '.join(nonzero_counts)}" if nonzero_counts else "- 板块覆盖：暂无",
+            f"- 本报告覆盖最近 `{len(recent_grouped_tasks)}` 个任务分段，同时维持跨轮次连续性。",
+            "",
+            "## 当前焦点",
+            f"- {last_handoff or '暂无 handoff 摘要。'}",
+            "",
+            "## 近期决策",
+        ]
+        if latest_decisions:
+            lines.extend([f"- {item}" for item in latest_decisions])
+        else:
+            lines.append("- 暂无显式决策摘要。")
+        lines.extend(
+            [
+                "",
+                "## 近期学习",
+            ]
+        )
+        if latest_learnings:
+            lines.extend([f"- {item}" for item in latest_learnings])
+        else:
+            lines.append("- 暂无稳定学习条目。")
+        lines.extend(
+            [
+                "",
+                "## 待处理与风险",
+            ]
+        )
+        if latest_open_loops:
+            lines.extend([f"- {item}" for item in latest_open_loops])
+        else:
+            lines.append("- 当前没有明确记录的 open loops。")
+        lines.extend(
+            [
+                "",
+                "## 验证与证据",
+            ]
+        )
+        if validation_notes:
+            lines.extend([f"- {item}" for item in validation_notes])
+        else:
+            lines.append("- 当前项目记忆中没有提取到明确的验证记录。")
+        lines.extend(
+            [
+                "",
+                "## 近期轮次变更",
+            ]
+        )
+        for grouped_task_id, records in reversed(recent_grouped_tasks):
+            lines.extend(_task_section_lines(grouped_task_id, records, preferred_language))
+        lines.extend(
+            [
+                "## 建议下一步",
+            ]
+        )
+        if latest_open_loops:
+            lines.extend([f"- 优先处理：{item}" for item in latest_open_loops[:3]])
+        elif latest_handoff := last_handoff:
+            lines.append(f"- 延续当前交接重点：{latest_handoff}")
+        else:
+            lines.append("- 暂无明确下一步建议。")
+    else:
+        title = "Project Update Log"
+        summary = f"Auto-compiled from {distinct_task_count} tasks and {len(project_memory_records)} project-memory records using a structured round-by-round report format."
+        preview = " ".join(top_summaries) if top_summaries else "No recent project-memory summaries are available yet."
+        lines = [
+            f"# {title}",
+            "",
+            f"- Project: `{project_name}`",
+            f"- Current task: `{task_id}`" if task_id and task_id != "-" else "- Current task: none",
+            f"- Last updated: `{project_memory_last_updated}`" if project_memory_last_updated else "- Last updated: n/a",
+            f"- Generated language: `English`",
+            f"- Source tasks: `{distinct_task_count}`",
+            f"- Source records: `{len(project_memory_records)}`",
+            "",
+            "## Overview",
+            "- This report is compiled from existing Project Memory rather than maintained as a second manual changelog.",
+            f"- Lane coverage: {', '.join(nonzero_counts)}" if nonzero_counts else "- Lane coverage: none",
+            f"- This report covers the latest `{len(recent_grouped_tasks)}` task segments while preserving cross-round continuity.",
+            "",
+            "## Current Focus",
+            f"- {last_handoff or 'No handoff summary is available yet.'}",
+            "",
+            "## Recent Decisions",
+        ]
+        if latest_decisions:
+            lines.extend([f"- {item}" for item in latest_decisions])
+        else:
+            lines.append("- No explicit decision summaries are available yet.")
+        lines.extend(
+            [
+                "",
+                "## Recent Learnings",
+            ]
+        )
+        if latest_learnings:
+            lines.extend([f"- {item}" for item in latest_learnings])
+        else:
+            lines.append("- No stable learnings are recorded yet.")
+        lines.extend(
+            [
+                "",
+                "## Open Loops and Risks",
+            ]
+        )
+        if latest_open_loops:
+            lines.extend([f"- {item}" for item in latest_open_loops])
+        else:
+            lines.append("- There are no explicitly recorded open loops right now.")
+        lines.extend(
+            [
+                "",
+                "## Validation and Evidence",
+            ]
+        )
+        if validation_notes:
+            lines.extend([f"- {item}" for item in validation_notes])
+        else:
+            lines.append("- No explicit validation evidence was extracted from the current project memory.")
+        lines.extend(
+            [
+                "",
+                "## Recent Rounds",
+            ]
+        )
+        for grouped_task_id, records in reversed(recent_grouped_tasks):
+            lines.extend(_task_section_lines(grouped_task_id, records, preferred_language))
+        lines.extend(
+            [
+                "## Recommended Next Steps",
+            ]
+        )
+        if latest_open_loops:
+            lines.extend([f"- Prioritize: {item}" for item in latest_open_loops[:3]])
+        elif last_handoff:
+            lines.append(f"- Continue the current handoff focus: {last_handoff}")
+        else:
+            lines.append("- No concrete next-step recommendation is available yet.")
+
+    return ProjectUpdateLog(
+        title=title,
+        summary=_shorten(summary, 120),
+        preview=_shorten(preview, 280),
+        content="\n".join(lines).strip() if include_content else "",
+        updated_at=project_memory_last_updated,
+        preferred_language=preferred_language,
+        source_task_count=distinct_task_count,
+        source_record_count=len(project_memory_records),
+        is_available=True,
+    )
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def _project_slug(value: str) -> str:
+    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in value.strip())
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-") or "workspace"
+
+
+def _project_identity_key(value: str) -> str:
+    return "".join(ch.lower() for ch in value.strip() if ch.isalnum())
+
+
+def _resolve_selected_scope(workspace_path: str, registry_projects: list[dict[str, str]]) -> SelectedScope:
+    if not workspace_path:
+        return SelectedScope(kind="all_vault", label="All Vault", project_name="", workspace="")
+    registry_by_path = {
+        _normalize_path(project.get("path")): project for project in registry_projects if _normalize_path(project.get("path"))
+    }
+    project = registry_by_path.get(workspace_path)
+    project_name = (project or {}).get("name") or Path(workspace_path).name
+    return SelectedScope(
+        kind="workspace",
+        label=f"{project_name} · Workspace",
+        project_name=project_name,
+        workspace=workspace_path,
+    )
+
+
+def _memory_counts_by_workspace(global_root_path: Path) -> dict[str, dict[str, int]]:
+    counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for lane, file_name in [
+        ("decision_log", "decision-log.ndjson"),
+        ("open_loops", "open-loops.ndjson"),
+        ("promoted_learnings", "promoted-learnings.ndjson"),
+    ]:
+        for record in _read_ndjson(global_root_path / "memory" / file_name):
+            workspace_path = _normalize_path(record.get("workspace"))
+            if not workspace_path:
+                continue
+            counts[workspace_path][lane] += 1
+    return counts
+
+
+def _fallback_knowledge_projects(
+    *,
+    vault_root_path: Path,
+    registry_projects: list[dict[str, str]],
+    available_workspaces: list[WorkspaceOption],
+) -> list[KnowledgeProjectSummary]:
+    registry_by_path = {
+        _normalize_path(project.get("path")): project for project in registry_projects if _normalize_path(project.get("path"))
+    }
+    projects: list[KnowledgeProjectSummary] = []
+    seen: set[str] = set()
+    for option in available_workspaces:
+        workspace_path = option.path
+        if not workspace_path or workspace_path in seen:
+            continue
+        seen.add(workspace_path)
+        project = registry_by_path.get(workspace_path)
+        fallback_label = (project or {}).get("name") or option.label or Path(workspace_path).name
+        slug = _project_slug(fallback_label or "workspace")
+        project_name = _project_display_name(str(fallback_label or ""), workspace_path, slug)
+        wiki_root = vault_root_path / "10 Wiki" / "Projects" / slug
+        page_count = len(list(wiki_root.glob("*.md"))) if wiki_root.exists() else 0
+        projects.append(
+            KnowledgeProjectSummary(
+                name=project_name,
+                slug=slug,
+                workspace=workspace_path,
+                source=option.source,
+                lifecycle_phase="IDLE",
+                runtime="",
+                last_updated=option.last_seen,
+                focus="",
+                page_count=page_count,
+                has_wiki=wiki_root.exists(),
+                wiki_root=str(wiki_root),
+            )
+        )
+    return sorted(projects, key=lambda item: item.name.lower())
+
+
+def _project_display_name(name: str, workspace: str, slug: str) -> str:
+    normalized_name = str(name or "").strip()
+    if normalized_name:
+        return normalized_name
+    workspace_path = _normalize_path(workspace)
+    if workspace_path:
+        workspace_name = Path(workspace_path).name.strip()
+        if workspace_name:
+            return workspace_name
+    slug_name = str(slug or "").strip().replace("-", " ")
+    if slug_name:
+        return slug_name.title()
+    return "Workspace"
+
+
+def _looks_like_placeholder_workspace(raw_workspace: str, slug: str, name: str) -> bool:
+    raw_value = str(raw_workspace or "").strip()
+    if not raw_value:
+        return True
+    if Path(raw_value).is_absolute():
+        return False
+    raw_key = _project_identity_key(raw_value)
+    if not raw_key:
+        return True
+    return raw_key in {
+        _project_identity_key(slug),
+        _project_identity_key(name),
+        _project_identity_key(name.replace("_", " ")),
+    }
+
+
+def _canonicalize_manifest_project(
+    *,
+    item: dict[str, Any],
+    vault_root_path: Path,
+    fallback_by_slug: dict[str, KnowledgeProjectSummary],
+) -> KnowledgeProjectSummary:
+    raw_slug = str(item.get("slug") or "")
+    raw_name = str(item.get("name") or item.get("project_name") or "")
+    raw_workspace = str(item.get("workspace") or "")
+    fallback = fallback_by_slug.get(raw_slug)
+
+    canonical_workspace = _normalize_path(raw_workspace)
+    if fallback and _looks_like_placeholder_workspace(raw_workspace, raw_slug, raw_name):
+        canonical_workspace = fallback.workspace
+
+    display_name = _project_display_name(raw_name, canonical_workspace, raw_slug)
+    if fallback:
+        raw_name_key = _project_identity_key(raw_name)
+        fallback_name_key = _project_identity_key(fallback.name)
+        slug_key = _project_identity_key(raw_slug)
+        if not raw_name_key or raw_name_key == slug_key:
+            display_name = fallback.name
+        elif fallback_name_key and raw_name_key == fallback_name_key:
+            display_name = fallback.name
+
+    effective_workspace = canonical_workspace or (fallback.workspace if fallback else "")
+    effective_slug = raw_slug or (fallback.slug if fallback else _project_slug(display_name))
+    wiki_root = vault_root_path / "10 Wiki" / "Projects" / effective_slug
+
+    return KnowledgeProjectSummary(
+        name=display_name,
+        slug=effective_slug,
+        workspace=effective_workspace,
+        source=str(item.get("source") or (fallback.source if fallback else "registry")),
+        lifecycle_phase=str(item.get("lifecycle_phase") or "IDLE"),
+        runtime=_runtime_display_name(item.get("runtime") or ""),
+        last_updated=str(item.get("last_updated") or ""),
+        focus=_shorten(str(item.get("focus") or ""), 96),
+        page_count=int(item.get("page_count") or 0),
+        has_wiki=bool(item.get("page_count")),
+        wiki_root=str(wiki_root),
+    )
+
+
+def _merge_knowledge_projects(
+    primary_projects: list[KnowledgeProjectSummary],
+    fallback_projects: list[KnowledgeProjectSummary],
+) -> list[KnowledgeProjectSummary]:
+    merged: list[KnowledgeProjectSummary] = []
+    seen: set[str] = set()
+
+    def merge_key(project: KnowledgeProjectSummary) -> str:
+        workspace = _normalize_path(project.workspace)
+        if workspace:
+            return f"workspace:{workspace}"
+        if project.slug:
+            return f"slug:{project.slug}"
+        return f"name:{project.name.strip().lower()}"
+
+    for project in [*primary_projects, *fallback_projects]:
+        key = merge_key(project)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(project)
+    return merged
+
+
+def _resolve_knowledge_bundle(
+    *,
+    global_root_path: Path,
+    vault_root: str | Path | None,
+    registry_projects: list[dict[str, str]],
+    available_workspaces: list[WorkspaceOption],
+    workspace_path: str,
+    project_memory_counts: dict[str, int],
+    attention_state: str,
+    lifecycle_phase: str,
+    runtime: str,
+    project_memory_last_updated: str,
+    last_handoff: str,
+) -> tuple[
+    KnowledgeBaseOverview,
+    list[KnowledgeProjectSummary],
+    list[LegacySourceEntry],
+    KnowledgeGraphMeta,
+    list[KnowledgeGraphNode],
+    list[KnowledgeGraphEdge],
+    list[ObserveRollup],
+    SelectedScope,
+]:
+    selected_scope = _resolve_selected_scope(workspace_path, registry_projects)
+    if not vault_root:
+        return (
+            KnowledgeBaseOverview(
+                vault_root="",
+                is_configured=False,
+                is_normalized=False,
+                total_projects=0,
+                active_workspaces=0,
+                legacy_source_count=0,
+                wiki_page_count=0,
+                graph_node_count=0,
+                graph_edge_count=0,
+                last_built_at="",
+                summary="No Obsidian vault is configured yet.",
+            ),
+            [],
+            [],
+            KnowledgeGraphMeta(graph_path="", node_count=0, edge_count=0, updated_at="", is_available=False),
+            [],
+            [],
+            [],
+            selected_scope,
+        )
+
+    vault_root_path = Path(vault_root).expanduser()
+    if not vault_root_path.exists():
+        return (
+            KnowledgeBaseOverview(
+                vault_root=str(vault_root_path),
+                is_configured=True,
+                is_normalized=False,
+                total_projects=0,
+                active_workspaces=0,
+                legacy_source_count=0,
+                wiki_page_count=0,
+                graph_node_count=0,
+                graph_edge_count=0,
+                last_built_at="",
+                summary="Configured Obsidian vault root does not exist.",
+            ),
+            [],
+            [],
+            KnowledgeGraphMeta(graph_path="", node_count=0, edge_count=0, updated_at="", is_available=False),
+            [],
+            [],
+            [],
+            selected_scope,
+        )
+
+    manifest_path = vault_root_path / "90 System" / "knowledge-base-manifest.json"
+    graph_path = vault_root_path / "90 System" / "graph.json"
+    manifest = _read_json(manifest_path)
+    graph_payload = _read_json(graph_path)
+
+    legacy_sources = [
+        LegacySourceEntry(
+            name=str(item.get("name") or ""),
+            path=str(item.get("path") or ""),
+            classification=str(item.get("classification") or ""),
+            status=str(item.get("status") or ""),
+        )
+        for item in manifest.get("legacy_sources", [])
+    ]
+
+    fallback_projects = _fallback_knowledge_projects(
+        vault_root_path=vault_root_path,
+        registry_projects=registry_projects,
+        available_workspaces=available_workspaces,
+    )
+    fallback_by_slug = {project.slug: project for project in fallback_projects if project.slug}
+
+    if manifest.get("projects"):
+        manifest_projects = [
+            _canonicalize_manifest_project(
+                item=item,
+                vault_root_path=vault_root_path,
+                fallback_by_slug=fallback_by_slug,
+            )
+            for item in manifest.get("projects", [])
+        ]
+        knowledge_projects = _merge_knowledge_projects(manifest_projects, fallback_projects)
+    else:
+        knowledge_projects = fallback_projects
+
+    if workspace_path and workspace_path not in {item.workspace for item in knowledge_projects}:
+        project_name = _project_display_name(selected_scope.project_name, workspace_path, _project_slug(selected_scope.project_name or Path(workspace_path).name))
+        slug = _project_slug(project_name)
+        wiki_root = vault_root_path / "10 Wiki" / "Projects" / slug
+        knowledge_projects.insert(
+            0,
+            KnowledgeProjectSummary(
+                name=project_name,
+                slug=slug,
+                workspace=workspace_path,
+                source="manual",
+                lifecycle_phase=lifecycle_phase,
+                runtime=runtime,
+                last_updated=project_memory_last_updated,
+                focus=last_handoff,
+                page_count=len(list(wiki_root.glob("*.md"))) if wiki_root.exists() else 0,
+                has_wiki=wiki_root.exists(),
+                wiki_root=str(wiki_root),
+            ),
+        )
+
+    graph_nodes = [
+        KnowledgeGraphNode(
+            id=str(item.get("id") or ""),
+            label=str(item.get("label") or ""),
+            kind=str(item.get("kind") or ""),
+            path=str(item.get("path") or ""),
+            scope=str(item.get("scope") or ""),
+            workspace=_normalize_path(item.get("workspace")),
+            status=str(item.get("status") or ""),
+        )
+        for item in graph_payload.get("nodes", [])
+    ]
+    graph_edges = [
+        KnowledgeGraphEdge(
+            source=str(item.get("source") or ""),
+            target=str(item.get("target") or ""),
+            kind=str(item.get("kind") or ""),
+        )
+        for item in graph_payload.get("edges", [])
+    ]
+    graph_updated_at = ""
+    if graph_path.exists():
+        graph_updated_at = datetime.fromtimestamp(graph_path.stat().st_mtime, tz=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
+    graph_meta = KnowledgeGraphMeta(
+        graph_path=str(graph_path),
+        node_count=int(graph_payload.get("node_count") or len(graph_nodes)),
+        edge_count=int(graph_payload.get("edge_count") or len(graph_edges)),
+        updated_at=graph_updated_at,
+        is_available=graph_path.exists() and bool(graph_nodes),
+    )
+
+    summary_counts = manifest.get("summary", {})
+    total_projects = len(knowledge_projects)
+    active_workspaces = len([item for item in knowledge_projects if item.source == "active"])
+    wiki_page_count = int(summary_counts.get("wiki_page_count") or sum(item.page_count for item in knowledge_projects))
+    graph_node_count = int(summary_counts.get("graph_node_count") or len(graph_nodes))
+    graph_edge_count = int(summary_counts.get("graph_edge_count") or len(graph_edges))
+    last_built_at = str(manifest.get("generated_at") or "")
+    is_normalized = all((vault_root_path / name).exists() for name in CANONICAL_TOP_LEVELS)
+
+    lane_counts_by_workspace = _memory_counts_by_workspace(global_root_path)
+    observe_rollups: list[ObserveRollup] = []
+    for project in knowledge_projects:
+        lane_counts = lane_counts_by_workspace.get(project.workspace, {})
+        latest_sync_status = "OK" if project.lifecycle_phase == "SYNCED" else "--"
+        observe_rollups.append(
+            ObserveRollup(
+                project_name=project.name,
+                slug=project.slug,
+                workspace_count=1,
+                latest_runtime=project.runtime,
+                latest_sync_status=latest_sync_status,
+                attention_state=attention_state if project.workspace == workspace_path else ("healthy" if latest_sync_status == "OK" else "idle"),
+                latest_activity=project.last_updated,
+                latest_focus=project.focus,
+                open_loop_count=int(lane_counts.get("open_loops", 0)),
+                decision_count=int(lane_counts.get("decision_log", 0)),
+                learning_count=int(lane_counts.get("promoted_learnings", 0)),
+                workspaces=[project.workspace] if project.workspace else [],
+            )
+        )
+
+    overview = KnowledgeBaseOverview(
+        vault_root=str(vault_root_path),
+        is_configured=True,
+        is_normalized=is_normalized,
+        total_projects=total_projects,
+        active_workspaces=active_workspaces,
+        legacy_source_count=len(legacy_sources),
+        wiki_page_count=wiki_page_count,
+        graph_node_count=graph_node_count,
+        graph_edge_count=graph_edge_count,
+        last_built_at=last_built_at,
+        summary=_shorten(
+            f"Vault-wide knowledge base with {total_projects} projects, {wiki_page_count} wiki pages, {len(legacy_sources)} legacy sources, and a {graph_node_count}-node graph.",
+            140,
+        ),
+    )
+    return (
+        overview,
+        knowledge_projects,
+        legacy_sources,
+        graph_meta,
+        graph_nodes,
+        graph_edges,
+        sorted(observe_rollups, key=lambda item: (item.latest_activity, item.project_name), reverse=True),
+        selected_scope,
     )
 
 
@@ -1051,6 +1973,7 @@ def build_state(
     workspace: str | Path | None = None,
     global_root: str | Path | None = None,
     gemini_settings: str | Path | None = None,
+    vault_root: str | Path | None = None,
     snapshot_mode: str = "full",
 ) -> DashboardState:
     global_root_path = resolve_global_root(global_root)
@@ -1061,6 +1984,7 @@ def build_state(
         raise ValueError(f"unsupported snapshot mode: {snapshot_mode}")
     include_project_memory_details = normalized_snapshot_mode == "full"
     include_question_profile_content = normalized_snapshot_mode == "full"
+    include_update_log_content = normalized_snapshot_mode == "full"
     project_memory_limit = 120 if normalized_snapshot_mode == "full" else 24
 
     receipts_path = global_root_path / "sync" / "receipts.ndjson"
@@ -1158,6 +2082,16 @@ def build_state(
         workspace_path=workspace_path,
         include_content=include_question_profile_content,
     )
+    project_update_log = _project_update_log(
+        project_name=Path(workspace_path).name if workspace_path else "(no workspace)",
+        task_id=task_id,
+        last_handoff=last_handoff,
+        project_memory_counts=project_memory_counts,
+        project_memory_records=project_memory_records,
+        project_memory_last_updated=project_memory_last_updated,
+        user_question_profile=user_question_profile,
+        include_content=include_update_log_content,
+    )
 
     settings_payload = {}
     if gemini_settings_path.exists():
@@ -1183,6 +2117,28 @@ def build_state(
         learning_receipts=workspace_learning,
         sync_records=sync_records,
         alerts=alerts,
+    )
+    (
+        knowledge_base_overview,
+        knowledge_projects,
+        legacy_sources,
+        knowledge_graph_meta,
+        knowledge_graph_nodes,
+        knowledge_graph_edges,
+        observe_rollups,
+        selected_scope,
+    ) = _resolve_knowledge_bundle(
+        global_root_path=global_root_path,
+        vault_root=vault_root,
+        registry_projects=registry_projects,
+        available_workspaces=available_workspaces,
+        workspace_path=workspace_path,
+        project_memory_counts=project_memory_counts,
+        attention_state=attention_state,
+        lifecycle_phase=lifecycle_phase,
+        runtime=runtime,
+        project_memory_last_updated=project_memory_last_updated,
+        last_handoff=last_handoff,
     )
     current_task_health = TaskHealth(
         is_booted=boot_status == "OK",
@@ -1219,6 +2175,15 @@ def build_state(
         alerts=alerts,
         last_sync_delta=last_sync_delta,
         user_question_profile=user_question_profile,
+        project_update_log=project_update_log,
+        knowledge_base_overview=knowledge_base_overview,
+        knowledge_projects=knowledge_projects,
+        legacy_sources=legacy_sources,
+        knowledge_graph_meta=knowledge_graph_meta,
+        knowledge_graph_nodes=knowledge_graph_nodes,
+        knowledge_graph_edges=knowledge_graph_edges,
+        observe_rollups=observe_rollups,
+        selected_scope=selected_scope,
         includes_project_memory_details=include_project_memory_details,
         includes_question_profile_content=include_question_profile_content,
         project_memory_counts=project_memory_counts,

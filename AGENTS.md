@@ -1,18 +1,17 @@
 <!-- managed-by: global-agent-fabric bootstrap_gemini_workspace.py -->
 # Workspace Context Entry
 
-This file is the project-scoped context bridge for Gemini CLI and Codex.
+This file is the project-scoped context bridge for Gemini CLI, Codex, and Antigravity-hosted coding agents.
 
 ## Scope
 
-- Global shared instructions continue to load from `~/.gemini/GEMINI.md`.
+- Global shared instructions continue to load from `~/.gemini/GEMINI.md` and the shared-fabric bridge files.
 - This file adds only workspace-specific context.
 - Shared fabric remains the canonical source for project registry, memory routing, MCP definitions, skills, and workflow registries.
 
 ## Workspace Imports
 
 @./.agents/sync/user-question-profile.md
-
 _No additional project overlay rules are registered for this workspace._
 
 ## Optional Deep Context

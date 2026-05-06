@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <link rel="stylesheet" href="xterm.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b0d11;
+      }
+
+      #terminal-root {
+        width: 100%;
+        height: 100%;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        background:
+          radial-gradient(circle at top left, rgba(48, 70, 110, 0.18), transparent 34%),
+          linear-gradient(180deg, #0d1015 0%, #090b10 100%);
+      }
+
+      #terminal {
+        width: 100%;
+        height: 100%;
+      }
+
+      .xterm {
+        height: 100%;
+      }
+
+      .xterm-viewport {
+        background: transparent !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal-root">
+      <div id="terminal"></div>
+    </div>
+
+    <script src="xterm.js"></script>
+    <script src="addon-fit.js"></script>
+    <script>
+      (() => {
+        const terminalElement = document.getElementById("terminal");
+        const term = new Terminal({
+          allowProposedApi: true,
+          convertEol: false,
+          cursorBlink: true,
+          cursorStyle: "block",
+          fontFamily:
+            "SFMono-Regular, ui-monospace, Menlo, Monaco, Consolas, monospace",
+          fontSize: 13,
+          lineHeight: 1.18,
+          scrollback: 12000,
+          theme: {
+            background: "#090b10",
+            foreground: "#edf1f7",
+            cursor: "#cfe6ff",
+            cursorAccent: "#090b10",
+            selectionBackground: "rgba(102, 149, 255, 0.28)",
+            black: "#0b0d11",
+            red: "#ff6c7f",
+            green: "#68d391",
+            yellow: "#f6c177",
+            blue: "#6ea8ff",
+            magenta: "#d4a5ff",
+            cyan: "#6de0ff",
+            white: "#edf1f7",
+            brightBlack: "#5c6575",
+            brightRed: "#ff8f9f",
+            brightGreen: "#8ce6aa",
+            brightYellow: "#ffd38f",
+            brightBlue: "#8abaff",
+            brightMagenta: "#e3bbff",
+            brightCyan: "#8cebff",
+            brightWhite: "#ffffff"
+          }
+        });
+
+        const fitAddon = new FitAddon.FitAddon();
+        const utf8Decoder = new TextDecoder("utf-8");
+
+        term.loadAddon(fitAddon);
+        term.open(terminalElement);
+        fitAddon.fit();
+        term.focus();
+
+        const post = (name, payload) => {
+          const handler = window.webkit?.messageHandlers?.[name];
+          if (handler) {
+            handler.postMessage(payload);
+          }
+        };
+
+        const sendResize = () => {
+          fitAddon.fit();
+          post("terminalResize", { cols: term.cols, rows: term.rows });
+        };
+
+        term.onData((data) => {
+          post("terminalInput", data);
+        });
+
+        window.sharedFabricTerminal = {
+          receive(base64) {
+            const binary = atob(base64);
+            const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+            term.write(utf8Decoder.decode(bytes, { stream: true }));
+          },
+          focus() {
+            term.focus();
+          },
+          clear() {
+            term.clear();
+          }
+        };
+
+        new ResizeObserver(() => {
+          sendResize();
+        }).observe(document.body);
+
+        window.addEventListener("focus", () => term.focus());
+        window.addEventListener("load", () => {
+          sendResize();
+          post("terminalReady", { ready: true });
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -2,22 +2,22 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-APP_ROOT="$SCRIPT_DIR/Shared Fabric Dashboard.app"
+APP_ROOT="$SCRIPT_DIR/Fabric.app"
 CONTENTS_DIR="$APP_ROOT/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
-APP_BIN="$MACOS_DIR/SharedFabricDashboard"
-MODULE_CACHE_DIR="/tmp/shared_fabric_dashboard_app/module-cache"
+APP_BIN="$MACOS_DIR/Fabric"
+MODULE_CACHE_DIR="/tmp/fabric_app/module-cache"
 SWIFT_SRC="$SCRIPT_DIR/FloatingDashboard.swift"
 PLIST_TEMPLATE="$SCRIPT_DIR/DashboardInfo.plist"
 ASSETS_DIR="$SCRIPT_DIR/assets"
-STATIC_ICON_SVG="$ASSETS_DIR/shared-fabric-app-icon.svg"
-ICONSET_DIR="$MODULE_CACHE_DIR/SharedFabricDashboard.iconset"
-ICON_FILE="$RESOURCES_DIR/SharedFabricDashboard.icns"
-ICON_PNG="$RESOURCES_DIR/SharedFabricDashboard.png"
+STATIC_ICON_SVG="$ASSETS_DIR/fabric-app-icon.svg"
+ICONSET_DIR="$MODULE_CACHE_DIR/Fabric.iconset"
+ICON_FILE="$RESOURCES_DIR/Fabric.icns"
+ICON_PNG="$RESOURCES_DIR/Fabric.png"
 ICON_TIFF_DIR="$MODULE_CACHE_DIR/icon-tiff"
-ICON_TIFF_FILE="$ICON_TIFF_DIR/SharedFabricDashboard.tiff"
-MASTER_ICON_PNG="$MODULE_CACHE_DIR/SharedFabricDashboard-master.png"
+ICON_TIFF_FILE="$ICON_TIFF_DIR/Fabric.tiff"
+MASTER_ICON_PNG="$MODULE_CACHE_DIR/Fabric-master.png"
 
 mkdir -p "$MODULE_CACHE_DIR" "$MACOS_DIR" "$RESOURCES_DIR" "$ICON_TIFF_DIR"
 cp "$PLIST_TEMPLATE" "$CONTENTS_DIR/Info.plist"
@@ -53,7 +53,7 @@ if sips -s format png "$STATIC_ICON_SVG" --out "$MASTER_ICON_PNG" >/dev/null; th
   cp "$ICONSET_DIR/icon_512x512@2x.png" "$ICON_PNG"
   rm -f "$ICON_FILE"
   if ! iconutil -c icns "$ICONSET_DIR" -o "$ICON_FILE"; then
-    echo "warning: iconutil could not build SharedFabricDashboard.icns; trying TIFF fallback" >&2
+    echo "warning: iconutil could not build Fabric.icns; trying TIFF fallback" >&2
     find "$ICON_TIFF_DIR" -type f -delete
     for png in "$ICONSET_DIR"/*.png; do
       base="$(basename "$png" .png)"

@@ -43,6 +43,11 @@ def _safe_name(value: str, fallback: str) -> str:
     return cleaned or fallback
 
 
+def _safe_session_file_name(session_id: str, fallback: str = "session") -> str:
+    stem = _safe_name(session_id.replace("/", "_").replace("\\", "_").replace("..", "_"), fallback)
+    return f"{stem}.md"
+
+
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -296,7 +301,7 @@ def _codex_sessions_for_workspace(workspace: str, codex_root: Path, out_root: Pa
             workspace=workspace,
             thread_name=title,
         )
-        file_name = f"{session_id}.md"
+        file_name = _safe_session_file_name(session_id)
         output_path = out_root / workspace_name / "Codex" / file_name
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(markdown, encoding="utf-8")
@@ -343,7 +348,7 @@ def _gemini_sessions_for_workspace(workspace: str, gemini_root: Path, out_root: 
                 )
             except (ValueError, json.JSONDecodeError):
                 continue
-            file_name = f"{session_id}.md"
+            file_name = _safe_session_file_name(session_id)
             output_path = out_root / workspace_name / "Gemini CLI" / file_name
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(markdown, encoding="utf-8")

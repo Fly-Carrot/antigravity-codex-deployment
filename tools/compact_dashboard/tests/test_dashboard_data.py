@@ -98,7 +98,7 @@ class DashboardDataTests(unittest.TestCase):
                 json.dumps(
                     {
                         "task_id": "task-live",
-                        "summary": "workspace handoff summary",
+                        "summary": "当前重点是把 dashboard 同步链路整理稳定。",
                         "timestamp": "2026-04-20T06:08:00Z",
                         "workspace": str(workspace),
                     }
@@ -193,11 +193,213 @@ class DashboardDataTests(unittest.TestCase):
             self.assertEqual(state.last_sync_delta.records[0].title, "Learning Receipt")
             self.assertEqual(state.project_memory_counts["receipts"], 1)
             self.assertGreaterEqual(len(state.project_memory_records), 4)
+            self.assertTrue(state.project_update_log.is_available)
+            self.assertEqual(state.project_update_log.preferred_language, "zh")
+            self.assertIn("项目更新日志", state.project_update_log.content)
+            self.assertIn("近期轮次变更", state.project_update_log.content)
+            self.assertIn("验证与证据", state.project_update_log.content)
+            self.assertIn("建议下一步", state.project_update_log.content)
+            self.assertIn("task-live", state.project_update_log.content)
+            self.assertIn("时间范围", state.project_update_log.content)
             self.assertTrue(state.current_task_health.has_learning_receipt)
             self.assertEqual(state.active_mcp_count, 2)
             self.assertEqual(state.enabled_registry_count, 1)
             self.assertEqual(state.disabled_registry_count, 1)
             self.assertEqual(state.available_workspaces[0].source, "active")
+
+    def test_build_state_exposes_knowledge_base_snapshot_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "MCP_Hub"
+            vault = root / "vault"
+            workspace.mkdir()
+            (vault / "90 System").mkdir(parents=True)
+            settings_path = self._base_fixture(root, workspace)
+            self._write(
+                root / "sync" / "receipts.ndjson",
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "status_marker": "[BOOT_OK]",
+                                "task_id": "task-kb",
+                                "timestamp": "2026-04-28T06:00:00Z",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "status_marker": "[SYNC_OK]",
+                                "task_id": "task-kb",
+                                "timestamp": "2026-04-28T06:10:00Z",
+                                "summary": "kb ready",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+            )
+            self._write(
+                root / "memory" / "handoffs.ndjson",
+                json.dumps(
+                    {
+                        "task_id": "task-kb",
+                        "summary": "Current focus is the knowledge graph.",
+                        "timestamp": "2026-04-28T06:10:00Z",
+                        "workspace": str(workspace),
+                    }
+                )
+                + "\n",
+            )
+            self._write(root / "memory" / "decision-log.ndjson", "")
+            self._write(root / "memory" / "open-loops.ndjson", "")
+            self._write(root / "memory" / "mempalace-records.ndjson", "")
+            self._write(root / "memory" / "promoted-learnings.ndjson", "")
+            self._write(root / "sync" / "learning_receipts.ndjson", "")
+            self._write(root / "sync" / "task_phases.ndjson", "")
+            self._write(root / "memory" / "user-question-profile.md", "")
+            self._write(workspace / ".agents" / "sync" / "user-question-profile.md", "")
+            self._write(root / "memory" / "user-question-profiles.ndjson", "")
+            self._write(
+                vault / "90 System" / "knowledge-base-manifest.json",
+                json.dumps(
+                    {
+                        "generated_at": "2026-04-28T06:09:00Z",
+                        "projects": [
+                            {
+                                "name": "MCP_Hub",
+                                "slug": "mcp-hub",
+                                "workspace": str(workspace),
+                                "source": "registry",
+                                "page_count": 6,
+                                "lifecycle_phase": "SYNCED",
+                                "runtime": "codex",
+                                "focus": "Current focus is the knowledge graph.",
+                                "last_updated": "2026-04-28T06:10:00Z",
+                            }
+                        ],
+                        "legacy_sources": [
+                            {
+                                "name": "Agent Chat History",
+                                "path": str(vault / "Agent Chat History"),
+                                "classification": "legacy-agent-history",
+                                "status": "legacy",
+                            }
+                        ],
+                        "summary": {
+                            "project_count": 1,
+                            "active_workspace_count": 0,
+                            "legacy_source_count": 1,
+                            "wiki_page_count": 6,
+                            "graph_node_count": 3,
+                            "graph_edge_count": 2,
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+            self._write(
+                vault / "90 System" / "graph.json",
+                json.dumps(
+                    {
+                        "node_count": 3,
+                        "edge_count": 2,
+                        "nodes": [
+                            {"id": "vault:root", "label": "vault", "kind": "vault", "path": str(vault)},
+                            {"id": "project:mcp-hub", "label": "MCP_Hub", "kind": "project", "path": str(workspace), "scope": "mcp-hub", "workspace": str(workspace), "status": "SYNCED"},
+                            {"id": "page:mcp-hub:Architecture", "label": "Architecture", "kind": "page", "path": str(vault / "10 Wiki" / "Projects" / "mcp-hub" / "Architecture.md"), "scope": "mcp-hub", "workspace": str(workspace)},
+                        ],
+                        "edges": [
+                            {"source": "vault:root", "target": "project:mcp-hub", "kind": "contains"},
+                            {"source": "project:mcp-hub", "target": "page:mcp-hub:Architecture", "kind": "page"},
+                        ],
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+
+            state = build_state(workspace=workspace, global_root=root, gemini_settings=settings_path, vault_root=vault)
+
+            self.assertTrue(state.knowledge_base_overview.is_configured)
+            self.assertEqual(state.knowledge_base_overview.total_projects, 1)
+            self.assertEqual(state.knowledge_base_overview.graph_node_count, 3)
+            self.assertEqual(state.knowledge_graph_meta.node_count, 3)
+            self.assertEqual(len(state.knowledge_projects), 1)
+            self.assertEqual(state.knowledge_projects[0].slug, "mcp-hub")
+            self.assertEqual(len(state.legacy_sources), 1)
+            self.assertEqual(len(state.knowledge_graph_nodes), 3)
+            self.assertEqual(len(state.knowledge_graph_edges), 2)
+            self.assertEqual(state.observe_rollups[0].project_name, "MCP_Hub")
+            self.assertEqual(state.selected_scope.kind, "workspace")
+
+    def test_build_state_merges_manifest_projects_with_registry_workspaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "antigravity-codex-deployment"
+            sibling = root / "Gemini_CLI_Optimization"
+            workspace.mkdir()
+            sibling.mkdir()
+            settings_path = self._base_fixture(root, workspace)
+            self._write_registry(root, [(workspace.name, str(workspace)), (sibling.name, str(sibling))])
+
+            vault = root / "Obsidian Memory"
+            (vault / "10 Wiki" / "Projects" / "antigravity-codex-deployment").mkdir(parents=True)
+            (vault / "10 Wiki" / "Projects" / "gemini-cli-optimization").mkdir(parents=True)
+
+            self._write(root / "sync" / "receipts.ndjson", "")
+            self._write(root / "memory" / "handoffs.ndjson", "")
+            self._write(root / "memory" / "decision-log.ndjson", "")
+            self._write(root / "memory" / "open-loops.ndjson", "")
+            self._write(root / "memory" / "mempalace-records.ndjson", "")
+            self._write(root / "memory" / "promoted-learnings.ndjson", "")
+            self._write(root / "sync" / "learning_receipts.ndjson", "")
+            self._write(root / "sync" / "task_phases.ndjson", "")
+            self._write(root / "memory" / "user-question-profile.md", "")
+            self._write(workspace / ".agents" / "sync" / "user-question-profile.md", "")
+            self._write(root / "memory" / "user-question-profiles.ndjson", "")
+            self._write(
+                vault / "90 System" / "knowledge-base-manifest.json",
+                json.dumps(
+                    {
+                        "generated_at": "2026-05-01T10:00:00Z",
+                        "projects": [
+                            {
+                                "name": "antigravity-codex-deployment",
+                                "slug": "antigravity-codex-deployment",
+                                "workspace": str(workspace),
+                                "source": "registry",
+                                "page_count": 6,
+                                "lifecycle_phase": "SYNCED",
+                                "runtime": "codex",
+                                "focus": "Graph stabilization work",
+                                "last_updated": "2026-05-01T10:00:00Z",
+                            }
+                        ],
+                        "summary": {
+                            "project_count": 1,
+                            "wiki_page_count": 6,
+                            "graph_node_count": 10,
+                            "graph_edge_count": 12,
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+            self._write(vault / "90 System" / "graph.json", json.dumps({"nodes": [], "edges": []}, indent=2) + "\n")
+
+            state = build_state(workspace=workspace, global_root=root, gemini_settings=settings_path, vault_root=vault)
+
+            self.assertEqual(state.knowledge_base_overview.total_projects, 2)
+            self.assertEqual(len(state.knowledge_projects), 2)
+            self.assertIn("antigravity-codex-deployment", {item.slug for item in state.knowledge_projects})
+            self.assertIn("gemini-cli-optimization", {item.slug for item in state.knowledge_projects})
+            self.assertEqual(len(state.observe_rollups), 2)
 
     def test_build_state_exposes_bridge_metadata_for_current_task(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

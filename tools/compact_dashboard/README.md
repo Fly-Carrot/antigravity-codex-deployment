@@ -115,7 +115,7 @@ If you launch the floating dashboard with no `--workspace`, it behaves like a gl
 
 2. Built app bundle
 
-- `tools/compact_dashboard_desktop/Shared Fabric Dashboard.app`
+- `tools/compact_dashboard_desktop/Fabric.app`
 
 Build it first:
 

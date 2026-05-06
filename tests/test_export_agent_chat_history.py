@@ -347,6 +347,66 @@ class ExportAgentChatHistoryTests(unittest.TestCase):
             self.assertIn("Here is the concise answer.", output_text)
             self.assertNotIn("very large payload", output_text)
 
+    def test_sanitizes_session_ids_before_writing_export_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            vault_root = root / "vault"
+            vault_root.mkdir()
+            codex_root = root / ".codex"
+            gemini_root = root / ".gemini"
+            (codex_root / "archived_sessions").mkdir(parents=True)
+            (gemini_root / "tmp").mkdir(parents=True)
+
+            session_id = "../outside-target"
+            (codex_root / "session_index.jsonl").write_text(
+                json.dumps({"id": session_id, "thread_name": "Unsafe Name"}) + "\n",
+                encoding="utf-8",
+            )
+            (codex_root / "archived_sessions" / "rollout-unsafe-name.jsonl").write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "timestamp": "2026-04-27T06:00:00Z",
+                                "type": "session_meta",
+                                "payload": {
+                                    "id": session_id,
+                                    "timestamp": "2026-04-27T06:00:00Z",
+                                    "cwd": str(workspace),
+                                },
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "timestamp": "2026-04-27T06:00:01Z",
+                                "type": "event_msg",
+                                "payload": {
+                                    "type": "agent_message",
+                                    "message": "Unsafe names should be sanitized.",
+                                },
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            export_chat_history(
+                workspace=workspace,
+                vault_root=vault_root,
+                output_dir="Agent Chat History",
+                runtime="codex",
+                codex_root=codex_root,
+                gemini_root=gemini_root,
+            )
+
+            export_root = vault_root / "Agent Chat History" / "workspace" / "Codex"
+            self.assertTrue((export_root / "outside-target.md").exists())
+            self.assertFalse((vault_root / "outside-target.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
