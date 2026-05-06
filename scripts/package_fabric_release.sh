@@ -12,6 +12,9 @@ mkdir -p "$DIST_DIR"
 "$REPO_ROOT/tools/compact_dashboard_desktop/build_dashboard_app.sh"
 rm -f "$DIST_DIR/$ARCHIVE_NAME" "$DIST_DIR/$CHECKSUM_NAME"
 
+xattr -cr "$APP_PATH" 2>/dev/null || true
+codesign --verify --deep --strict "$APP_PATH"
+
 (
   cd "$REPO_ROOT/tools/compact_dashboard_desktop"
   COPYFILE_DISABLE=1 /usr/bin/zip -qryX "$DIST_DIR/$ARCHIVE_NAME" "Fabric.app"

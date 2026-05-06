@@ -19,6 +19,7 @@ ICON_TIFF_DIR="$MODULE_CACHE_DIR/icon-tiff"
 ICON_TIFF_FILE="$ICON_TIFF_DIR/Fabric.tiff"
 MASTER_ICON_PNG="$MODULE_CACHE_DIR/Fabric-master.png"
 
+rm -rf "$APP_ROOT"
 mkdir -p "$MODULE_CACHE_DIR" "$MACOS_DIR" "$RESOURCES_DIR" "$ICON_TIFF_DIR"
 cp "$PLIST_TEMPLATE" "$CONTENTS_DIR/Info.plist"
 swiftc -module-cache-path "$MODULE_CACHE_DIR" "$SWIFT_SRC" -o "$APP_BIN"
@@ -74,3 +75,10 @@ fi
 
 # Finder tends to hold onto stale icon previews if the app bundle mtime does not move.
 touch "$APP_ROOT" "$CONTENTS_DIR" "$MACOS_DIR" "$RESOURCES_DIR" "$CONTENTS_DIR/Info.plist"
+
+# Build outputs on macOS can inherit provenance/quarantine attributes from copied
+# resources. Clear them and seal the final app bundle with an ad-hoc signature so
+# Gatekeeper does not see a half-signed bundle as damaged.
+xattr -cr "$APP_ROOT" 2>/dev/null || true
+codesign --force --deep --sign - "$APP_ROOT" >/dev/null
+codesign --verify --deep --strict "$APP_ROOT"
