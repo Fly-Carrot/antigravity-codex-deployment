@@ -367,9 +367,9 @@ def main() -> int:
 
     args.global_root = resolve_global_root(args.global_root)
     args.workspace = resolve_workspace(args.workspace)
-    args.mcp_config = resolve_path(args.mcp_config, ["AGF_ANTIGRAVITY_MCP_CONFIG"], default=Path("/Users/david_chen/.gemini/antigravity/mcp_config.json"))
-    args.brain_root = resolve_path(args.brain_root, ["AGF_ANTIGRAVITY_BRAIN_ROOT"], default=Path("/Users/david_chen/.gemini/antigravity/brain"))
-    args.history_root = resolve_path(args.history_root, ["AGF_ANTIGRAVITY_HISTORY_ROOT"], default=Path("/Users/david_chen/.gemini/history"))
+    args.mcp_config = resolve_path(args.mcp_config, ["AGF_ANTIGRAVITY_MCP_CONFIG"], default=Path.home() / ".gemini" / "antigravity" / "mcp_config.json")
+    args.brain_root = resolve_path(args.brain_root, ["AGF_ANTIGRAVITY_BRAIN_ROOT"], default=Path.home() / ".gemini" / "antigravity" / "brain")
+    args.history_root = resolve_path(args.history_root, ["AGF_ANTIGRAVITY_HISTORY_ROOT"], default=Path.home() / ".gemini" / "history")
 
     state = ImportState.load(args.global_root / "sync" / "import-state.json")
     memory_root = args.global_root / "memory"

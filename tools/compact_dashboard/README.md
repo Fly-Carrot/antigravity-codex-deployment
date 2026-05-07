@@ -162,4 +162,4 @@ The desktop panel is intentionally designed to feel closer to a small Apple util
 The panel stays read-only.
 It is meant to make sync and learning visible, not to become a control panel.
 
-`MCP_Hub` was the first pilot workspace, but the dashboard is no longer pinned to it by default. You can let it auto-follow the latest active workspace or pass `--workspace` to pin any project explicitly.
+The dashboard is not pinned to any public starter workspace by default. You can let it auto-follow the latest active workspace or pass `--workspace` to pin any project explicitly.

@@ -39,14 +39,14 @@ Based on the official Gemini CLI repository and documentation:
 - `global-agent-fabric` already centralizes project registry, sync scripts, shared memory routing, MCP registry, skills sources, and workflow sources.
 - The deployment project already templates `runtime-map.yaml`, `hook-policy.yaml`, and `projects/registry.yaml`.
 - The deployment project already understands Gemini-specific paths such as `AGF_GEMINI_ROOT` and `AGF_GEMINI_RULE`.
-- Your `Project4` workspace already has agent-specific local overlay material in `.agents/`.
+- Your `Example Workspace` workspace already has agent-specific local overlay material in `.agents/`.
 
 ### Current bottlenecks
 
 1. Gemini is only partially represented in the current model. The deployment layer knows about Gemini files, but the runtime model still treats `antigravity` as the active peer runtime.
 2. The current shared MCP registry still points back to `~/.gemini/antigravity/mcp_config.json` as the effective source, which keeps Antigravity in the center of the graph.
 3. `~/.gemini/settings.json` is almost empty right now and does not yet express project context compatibility, MCP rendering, skill conventions, or shared policy paths.
-4. `Project4` does not yet expose a Gemini-native context entrypoint such as `AGENTS.md` or `GEMINI.md` at the project root.
+4. a target workspace may not yet expose a Gemini-native context entrypoint such as `AGENTS.md` or `GEMINI.md` at the project root.
 5. Shared memories are still optimized around Codex + Antigravity sync receipts and imported workflows, not around Gemini's native `save_memory` / Auto Memory behavior.
 
 ## Canonical-source rule
@@ -86,10 +86,10 @@ Recommended structure:
 Example direction:
 
 ```md
-# David Global Gemini Context
+# User Global Gemini Context
 
-@/Users/david_chen/Antigravity_Skills/global-agent-fabric/rules/global/gemini-global.md
-@/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/shared-global-context.md
+@$AGF_GLOBAL_ROOT/rules/global/gemini-global.md
+@$AGF_GLOBAL_ROOT/memory/shared-global-context.md
 
 ## Gemini Added Memories
 ```
@@ -120,9 +120,9 @@ Then, for each shared workspace:
 - use imports to pull in `.agents/` rules and shared fabric overlays
 - keep `.agents/` as the implementation detail and `AGENTS.md` as the Gemini/Codex bridge file
 
-For `Project4`, the first good target is:
+For `Example Workspace`, the first good target is:
 
-- `/Users/david_chen/Desktop/Project4/AGENTS.md`
+- `/path/to/workspace/AGENTS.md`
   - imports `.agents/rules/ecology.md`
   - imports `.agents/sync/codex-context.md` only after that file is simplified into a Gemini-safe, non-duplicative project summary
 

@@ -79,7 +79,7 @@ Includes:
 ### B. Must Be Parameterized Before Migration
 
 Current files still embed machine-specific absolute paths such as
-`/Users/david_chen/...`.
+`/Users/your_username/...`.
 
 Most important path-bound files:
 

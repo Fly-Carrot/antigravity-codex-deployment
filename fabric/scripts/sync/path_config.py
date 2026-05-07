@@ -55,6 +55,6 @@ def resolve_global_root(cli_value: Path | None) -> Path:
 def resolve_workspace(cli_value: Path | None) -> Path:
     return resolve_path(
         cli_value,
-        ["AGF_DEFAULT_WORKSPACE", "AGF_PROJECT_4", "AGF_PROJECT_MCP_HUB"],
+        ["AGF_DEFAULT_WORKSPACE", "AGF_PROJECT_EXAMPLE"],
         default=Path.cwd(),
     ) or Path.cwd()

@@ -21,7 +21,7 @@ class BootstrapSharedFabricTests(unittest.TestCase):
                 user_home=home,
                 desktop_root=desktop,
                 framework_source_root=Path(__file__).resolve().parents[1] / "fabric",
-                global_root=home / "Antigravity_Skills" / "global-agent-fabric",
+                global_root=home / "AgentSharedFabric" / "global-agent-fabric",
                 awesome_skills_root=None,
                 gemini_root=None,
                 gemini_settings=None,
@@ -34,8 +34,7 @@ class BootstrapSharedFabricTests(unittest.TestCase):
 
             values = derive_values(args)
 
-            self.assertEqual(Path(values["AGF_PROJECT_MCP_HUB"]), (desktop / "MCP_Hub").resolve())
-            self.assertEqual(Path(values["AGF_PROJECT_4"]), (desktop / "Project4").resolve())
+            self.assertEqual(Path(values["AGF_PROJECT_EXAMPLE"]), (desktop / "Example Workspace").resolve())
             self.assertTrue(values["AGF_GEMINI_RULE"].endswith("/.gemini/GEMINI.md"))
 
     def test_ensure_layout_creates_skeleton_and_placeholders(self) -> None:
@@ -52,12 +51,7 @@ class BootstrapSharedFabricTests(unittest.TestCase):
                 "AGF_ANTIGRAVITY_BRAIN_ROOT": str(root / ".gemini" / "antigravity" / "brain"),
                 "AGF_ANTIGRAVITY_HISTORY_ROOT": str(root / "Library" / "Application Support" / "Antigravity" / "User" / "History"),
                 "AGF_CODEX_ROOT": str(root / ".codex"),
-                "AGF_PROJECT_MCP_HUB": str(root / "Desktop" / "MCP_Hub"),
-                "AGF_PROJECT_3_5": str(root / "Desktop" / "Project3.5"),
-                "AGF_PROJECT_4": str(root / "Desktop" / "Project4"),
-                "AGF_PROJECT_5": str(root / "Desktop" / "Project5"),
-                "AGF_PROJECT_5_5": str(root / "Desktop" / "Project 5.5"),
-                "AGF_PROJECT_DESIGN": str(root / "Desktop" / "Project Design"),
+                "AGF_PROJECT_EXAMPLE": str(root / "Desktop" / "Example Workspace"),
             }
 
             created = ensure_layout(values)
@@ -65,7 +59,7 @@ class BootstrapSharedFabricTests(unittest.TestCase):
             self.assertTrue((root / ".gemini" / "GEMINI.md").exists())
             self.assertTrue((root / ".gemini" / "settings.json").exists())
             self.assertTrue((root / ".gemini" / "antigravity" / "mcp_config.json").exists())
-            self.assertTrue((root / "Desktop" / "Project4" / ".agents").exists())
+            self.assertTrue((root / "Desktop" / "Example Workspace" / ".agents").exists())
             self.assertIn(str((root / "global-agent-fabric").resolve()), created)
 
     def test_render_env_file_and_command(self) -> None:
@@ -73,8 +67,8 @@ class BootstrapSharedFabricTests(unittest.TestCase):
             "AGF_USER_HOME": "/tmp/home",
             "AGF_DESKTOP_ROOT": "/tmp/home/Desktop",
             "AGF_FRAMEWORK_SOURCE_ROOT": "/tmp/repo/fabric",
-            "AGF_GLOBAL_ROOT": "/tmp/home/Antigravity_Skills/global-agent-fabric",
-            "AGF_AWESOME_SKILLS_ROOT": "/tmp/home/Antigravity_Skills/awesome-skills",
+            "AGF_GLOBAL_ROOT": "/tmp/home/AgentSharedFabric/global-agent-fabric",
+            "AGF_AWESOME_SKILLS_ROOT": "/tmp/home/AgentSharedFabric/agent-fabric-implementation/skills",
             "AGF_GEMINI_ROOT": "/tmp/home/.gemini",
             "AGF_GEMINI_SETTINGS": "/tmp/home/.gemini/settings.json",
             "AGF_GEMINI_RULE": "/tmp/home/.gemini/GEMINI.md",
@@ -82,18 +76,13 @@ class BootstrapSharedFabricTests(unittest.TestCase):
             "AGF_ANTIGRAVITY_BRAIN_ROOT": "/tmp/home/.gemini/antigravity/brain",
             "AGF_ANTIGRAVITY_HISTORY_ROOT": "/tmp/home/Library/Application Support/Antigravity/User/History",
             "AGF_CODEX_ROOT": "/tmp/home/.codex",
-            "AGF_PROJECT_MCP_HUB": "/tmp/home/Desktop/MCP_Hub",
-            "AGF_PROJECT_3_5": "/tmp/home/Desktop/Project3.5",
-            "AGF_PROJECT_4": "/tmp/home/Desktop/Project4",
-            "AGF_PROJECT_5": "/tmp/home/Desktop/Project5",
-            "AGF_PROJECT_5_5": "/tmp/home/Desktop/Project 5.5",
-            "AGF_PROJECT_DESIGN": "/tmp/home/Desktop/Project Design",
+            "AGF_PROJECT_EXAMPLE": "/tmp/home/Desktop/Example Workspace",
         }
 
         rendered = render_env_file(values)
         command = build_install_command(Path("/tmp/.env.local"), Path("/tmp/paths.yaml"), Path("/tmp/state.tgz"))
 
-        self.assertIn('AGF_GLOBAL_ROOT="/tmp/home/Antigravity_Skills/global-agent-fabric"', rendered)
+        self.assertIn('AGF_GLOBAL_ROOT="/tmp/home/AgentSharedFabric/global-agent-fabric"', rendered)
         self.assertEqual(command[-1], "/tmp/state.tgz")
 
 

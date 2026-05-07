@@ -7,7 +7,7 @@
 <h3 align="center">An LLM-Native Knowledge Base Maintainer for Shared Fabric and Obsidian</h3>
 
 <p align="center">
-  Fabric turns raw external inputs into a maintained wiki, a semantic graph, and a queryable terminal workflow.
+  Fabric turns high-volume AI output into a maintained wiki, a semantic graph, and a queryable terminal workflow.
   <br/>
   It is inspired by the <strong>llm-wiki</strong> pattern: raw sources stay raw, while the wiki becomes the durable synthesis layer.
 </p>
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Fly-Carrot/shared-fabric-codex-gemini/releases/tag/v4.0.0">Download Fabric v4.0.0</a>
+  <a href="https://github.com/Fly-Carrot/Fabric/releases/tag/v4.0.0">Download Fabric v4.0.0</a>
   ·
   <a href="docs/releases/v4.0.0.md">Release Notes</a>
   ·
@@ -37,9 +37,9 @@ Most agent workflows still stop at one of two weak endpoints:
 - raw conversations are archived, but not maintained into durable knowledge
 - wiki pages exist, but the source-to-wiki pipeline is informal and hard to inspect
 
-Fabric closes that gap.
+Fabric closes that gap. Its purpose is **not** to collect more data for its own sake; it is to turn messy AI-era work products into a **living LLM-wiki** that humans and agents can both read, search, visualize, and improve.
 
-It keeps **Shared Fabric** as the canonical cross-agent memory layer, while turning **Obsidian** into a maintained knowledge base with a clear operating model:
+It keeps **Agent Shared Fabric** as the canonical cross-agent governance and memory layer, while turning **Obsidian** into a maintained knowledge base with a clear operating model:
 
 - raw sources remain immutable
 - sources are normalized before synthesis
@@ -47,18 +47,18 @@ It keeps **Shared Fabric** as the canonical cross-agent memory layer, while turn
 - graph nodes become the semantic navigation layer
 - terminal + agents become the query and maintenance layer
 
-This repository is the portable deployment snapshot for that workflow. The live shared memory still lives in your chosen `global-agent-fabric` root.
+The split is intentional: **Agent Shared Fabric governs agent discipline and memory**, while **Fabric App consumes the resulting receipts, sources, wiki pages, graph data, and indexes** as a knowledge workstation.
 
 ## The Fabric Architecture
 
 Fabric is not just the macOS app. It is a local operating architecture for keeping agents, tools, sources, wiki pages, and graph/query workflows aligned.
 
-At the system level, Fabric has four layers:
+At the system level, the complete Fabric architecture has four layers:
 
 - **Governance brain**: `global-agent-fabric` stores rules, memory routing, project registries, MCP registries, workflow registries, and sync scripts.
 - **Implementation body**: external skill, workflow, MCP, and subagent implementations live outside the governance root so the control plane stays small and portable.
 - **Knowledge base**: Obsidian holds raw sources, maintained wiki pages, semantic indexes, manifests, and graph data.
-- **Workbench**: `Fabric.app` makes setup, monitoring, wiki, source processing, graph navigation, and terminal-based maintenance visible in one place.
+- **Workbench**: `Fabric.app` makes setup, monitoring, wiki, source processing, graph navigation, and terminal-based maintenance visible in one place. It consumes artifacts; it is not the governance source of truth.
 
 The architecture is deliberately inspired by several proven patterns, without claiming endorsement or affiliation:
 
@@ -71,6 +71,7 @@ The architecture is deliberately inspired by several proven patterns, without cl
 - **Skill and MCP registries** for tool discovery without copying every implementation into every runtime.
 
 See [Fabric Architecture](docs/fabric-architecture.md) for the full model.
+See [MCP Integration Guide](docs/mcp-integration-guide.md) before enabling third-party tool servers.
 
 ## Product Flow
 
@@ -96,7 +97,7 @@ Treat Obsidian as a maintained wiki layer rather than an export sink. Fabric hel
 
 ![Fabric sources](docs/assets/fabric-sources-view.png)
 
-External tools can stage raw inputs such as NotebookLM notes, agent chats, and shared-fabric snapshots. Fabric then normalizes, clusters, and compiles those materials into project-aware and vault-wide knowledge.
+External tools can stage raw inputs such as NotebookLM notes, agent chats, and shared-fabric snapshots. Fabric then normalizes, clusters, and compiles those materials into project-aware and vault-wide knowledge. Acquisition utilities live outside the core app so the public product stays focused on processing, synthesis, and retrieval.
 
 ### 5. Graph + Terminal
 
@@ -185,7 +186,7 @@ Use available MCP tools and local skills when they materially improve accuracy, 
 ## Repository Layout
 
 ```text
-shared-fabric-codex-gemini/
+Fabric/
   docs/
     assets/
     releases/
@@ -196,6 +197,7 @@ shared-fabric-codex-gemini/
   scripts/
   tests/
   tools/
+    acquisition/                 # optional personal import helpers
     compact_dashboard/
     compact_dashboard_desktop/
 ```
@@ -203,6 +205,6 @@ shared-fabric-codex-gemini/
 ## Notes
 
 - The public desktop bundle is now named `Fabric.app`.
-- The repo slug remains `shared-fabric-codex-gemini`.
 - Raw acquisition is intentionally treated as an external input layer; Fabric focuses on normalization, compilation, graphing, and query-time knowledge work.
+- MCP servers are disabled by default in the public starter. Enable only trusted tools in your private runtime registry.
 - Runtime logs remain available inside the app, but they are support tooling rather than the product center.

@@ -63,6 +63,8 @@ struct DashboardConfig {
     }
 }
 
+private let appHomeDirectory = FileManager.default.homeDirectoryForCurrentUser
+
 private struct ExternalCommandResult {
     let stdoutData: Data
     let stderrData: Data
@@ -74,6 +76,55 @@ private struct ExternalCommandResult {
 
     var stderrText: String {
         String(data: stderrData, encoding: .utf8) ?? ""
+    }
+}
+
+private final class ExternalCommandOutputCollector {
+    private let stdout: Pipe
+    private let stderr: Pipe
+    private let lock = NSLock()
+    private var stdoutData = Data()
+    private var stderrData = Data()
+
+    init(stdout: Pipe, stderr: Pipe) {
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+
+    func start() {
+        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            self?.append(handle.availableData, toStdout: true)
+        }
+        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            self?.append(handle.availableData, toStdout: false)
+        }
+    }
+
+    func stopAndResult(terminationStatus: Int32) -> ExternalCommandResult {
+        stdout.fileHandleForReading.readabilityHandler = nil
+        stderr.fileHandleForReading.readabilityHandler = nil
+        append(stdout.fileHandleForReading.availableData, toStdout: true)
+        append(stderr.fileHandleForReading.availableData, toStdout: false)
+        lock.lock()
+        let result = ExternalCommandResult(stdoutData: stdoutData, stderrData: stderrData, terminationStatus: terminationStatus)
+        lock.unlock()
+        return result
+    }
+
+    func stop() {
+        stdout.fileHandleForReading.readabilityHandler = nil
+        stderr.fileHandleForReading.readabilityHandler = nil
+    }
+
+    private func append(_ data: Data, toStdout: Bool) {
+        guard !data.isEmpty else { return }
+        lock.lock()
+        if toStdout {
+            stdoutData.append(data)
+        } else {
+            stderrData.append(data)
+        }
+        lock.unlock()
     }
 }
 
@@ -97,11 +148,14 @@ private enum ExternalCommandError: LocalizedError {
 
 private enum OpenTargetError: LocalizedError {
     case pathOutsideAllowedRoots(String)
+    case remoteURLNotAllowed(String)
 
     var errorDescription: String? {
         switch self {
         case let .pathOutsideAllowedRoots(path):
             return "Refused to open a path outside the allowed knowledge-base roots: \(path)"
+        case let .remoteURLNotAllowed(url):
+            return "Refused to open a remote URL from the local knowledge graph/wiki: \(url)"
         }
     }
 }
@@ -115,6 +169,14 @@ private func terminateExternalProcess(_ process: Process) {
         process.interrupt()
         usleep(200_000)
     }
+}
+
+private func processEnvironmentWithoutBytecode() -> [String: String] {
+    var environment = ProcessInfo.processInfo.environment
+    // Python bytecode caches would mutate the signed .app bundle when scripts run
+    // from Contents/Resources, so keep helper scripts read-only at runtime.
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    return environment
 }
 
 private func waitForProcessExit(_ process: Process, timeout: TimeInterval, commandDescription: String) throws {
@@ -149,17 +211,19 @@ private func executeExternalCommand(
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = arguments
     process.currentDirectoryURL = currentDirectoryURL
+    process.environment = processEnvironmentWithoutBytecode()
 
     let stdout = Pipe()
     let stderr = Pipe()
     process.standardOutput = stdout
     process.standardError = stderr
 
+    let output = ExternalCommandOutputCollector(stdout: stdout, stderr: stderr)
+    output.start()
+    defer { output.stop() }
     try waitForProcessExit(process, timeout: timeout, commandDescription: commandDescription)
 
-    let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
-    let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
-    return ExternalCommandResult(stdoutData: stdoutData, stderrData: stderrData, terminationStatus: process.terminationStatus)
+    return output.stopAndResult(terminationStatus: process.terminationStatus)
 }
 
 private func executeExternalCommandAsync(
@@ -172,12 +236,15 @@ private func executeExternalCommandAsync(
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
     process.arguments = arguments
     process.currentDirectoryURL = currentDirectoryURL
+    process.environment = processEnvironmentWithoutBytecode()
 
     let stdout = Pipe()
     let stderr = Pipe()
     process.standardOutput = stdout
     process.standardError = stderr
 
+    let output = ExternalCommandOutputCollector(stdout: stdout, stderr: stderr)
+    output.start()
     return try await withTaskCancellationHandler(operation: {
         let terminationStream = AsyncStream<Int32> { continuation in
             process.terminationHandler = { proc in
@@ -187,6 +254,7 @@ private func executeExternalCommandAsync(
         }
         try process.run()
 
+        defer { output.stop() }
         return try await withThrowingTaskGroup(of: ExternalCommandResult.self) { group in
             group.addTask {
                 var status = process.terminationStatus
@@ -194,9 +262,7 @@ private func executeExternalCommandAsync(
                     status = streamedStatus
                     break
                 }
-                let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
-                let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
-                return ExternalCommandResult(stdoutData: stdoutData, stderrData: stderrData, terminationStatus: status)
+                return output.stopAndResult(terminationStatus: status)
             }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
@@ -738,8 +804,13 @@ struct DashboardSnapshot: Codable {
     }
 }
 
-let defaultGlobalRoot = "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
-let defaultObsidianVaultRoot = "/Users/david_chen/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian Memory"
+let defaultGlobalRoot = appHomeDirectory
+    .appendingPathComponent("AgentSharedFabric")
+    .appendingPathComponent("global-agent-fabric")
+    .path
+let defaultObsidianVaultRoot = appHomeDirectory
+    .appendingPathComponent("Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian Memory")
+    .path
 let defaultObsidianRawSourcesDir = "00 Raw Sources/Agent Chats"
 let phaseOrder = ["route", "plan", "review", "dispatch", "execute", "report"]
 let phaseLabels = [
@@ -4529,8 +4600,8 @@ renderMarkdown(RAW_MARKDOWN);
             }
             let resolved = resolveWikiLinkTarget(rawPath: rawPath, currentPath: currentPath, vaultRoot: vaultRoot)
             let replacement: String
-            if resolved.hasPrefix("http://") || resolved.hasPrefix("https://") {
-                replacement = "[\(label)](\(resolved))"
+            if resolved.isEmpty {
+                replacement = label
             } else {
                 let encoded = resolved.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? resolved
                 replacement = "[\(label)](app-wiki://\(encoded))"
@@ -4549,8 +4620,8 @@ renderMarkdown(RAW_MARKDOWN);
 
     private func resolveWikiLinkTarget(rawPath: String, currentPath: String, vaultRoot: String) -> String {
         let cleaned = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleaned.hasPrefix("http://") || cleaned.hasPrefix("https://") {
-            return cleaned
+        if let remoteURL = URL(string: cleaned), let scheme = remoteURL.scheme?.lowercased(), ["http", "https"].contains(scheme) {
+            return ""
         }
         let fileManager = FileManager.default
         var candidates: [String] = []
@@ -7120,7 +7191,7 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
             throw OpenTargetError.pathOutsideAllowedRoots(target)
         }
         if let remoteURL = URL(string: trimmed), let scheme = remoteURL.scheme?.lowercased(), ["http", "https"].contains(scheme) {
-            return remoteURL
+            throw OpenTargetError.remoteURLNotAllowed(remoteURL.absoluteString)
         }
 
         let localPath: String
@@ -7853,7 +7924,7 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         guard let snapshot = viewModel.snapshot else { return }
         guard let vaultRoot = preferences.effectiveObsidianVaultRoot else { return }
         guard let repoRoot = config.repositoryRoot else { return }
-        let script = URL(fileURLWithPath: repoRoot).appendingPathComponent("tools/compact_dashboard/export_agent_chat_history.py").path
+        let script = URL(fileURLWithPath: repoRoot).appendingPathComponent("tools/acquisition/export_agent_chat_history.py").path
         let workspace = snapshot.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !workspace.isEmpty else { return }
 
@@ -7905,7 +7976,7 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         guard let snapshot = viewModel.snapshot else { return }
         guard let vaultRoot = preferences.effectiveObsidianVaultRoot else { return }
         guard let repoRoot = config.repositoryRoot else { return }
-        let script = URL(fileURLWithPath: repoRoot).appendingPathComponent("tools/compact_dashboard/export_agent_chat_history.py").path
+        let script = URL(fileURLWithPath: repoRoot).appendingPathComponent("tools/acquisition/export_agent_chat_history.py").path
 
         var workspacePaths = snapshot.availableWorkspaces.map(\.path)
         let currentWorkspace = snapshot.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -8891,11 +8962,12 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
         }
         arguments += ["--snapshot-mode", request.snapshotMode]
         process.arguments = arguments
+        process.environment = processEnvironmentWithoutBytecode()
 
         let fileManager = FileManager.default
         let tempRoot = fileManager.temporaryDirectory
-        let stdoutURL = tempRoot.appendingPathComponent("shared-fabric-dashboard-\(UUID().uuidString)-stdout.json")
-        let stderrURL = tempRoot.appendingPathComponent("shared-fabric-dashboard-\(UUID().uuidString)-stderr.log")
+        let stdoutURL = tempRoot.appendingPathComponent("fabric-\(UUID().uuidString)-stdout.json")
+        let stderrURL = tempRoot.appendingPathComponent("fabric-\(UUID().uuidString)-stderr.log")
         fileManager.createFile(atPath: stdoutURL.path, contents: nil)
         fileManager.createFile(atPath: stderrURL.path, contents: nil)
         let stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
@@ -9612,6 +9684,14 @@ func parseConfig() -> DashboardConfig {
         }
     }
 
+    func bundledSnapshotScript() -> String? {
+        guard let resourceURL = Bundle.main.resourceURL else { return nil }
+        let candidate = resourceURL
+            .appendingPathComponent("compact_dashboard")
+            .appendingPathComponent("export_snapshot.py")
+        return fileManager.fileExists(atPath: candidate.path) ? candidate.path : nil
+    }
+
     func defaultWorkspace() -> String? {
         if let override = environment["SHARED_FABRIC_DASHBOARD_WORKSPACE"], !override.isEmpty {
             return override
@@ -9640,22 +9720,29 @@ func parseConfig() -> DashboardConfig {
             return override
         }
         if let workspace, !workspace.isEmpty {
-            return URL(fileURLWithPath: workspace)
+            let candidate = URL(fileURLWithPath: workspace)
                 .appendingPathComponent("tools/compact_dashboard/export_snapshot.py")
-                .path
+            if fileManager.fileExists(atPath: candidate.path) {
+                return candidate.path
+            }
         }
 
         let executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let candidates = [
+            Bundle.main.bundleURL.deletingLastPathComponent(),
+            Bundle.main.resourceURL,
             executableURL.deletingLastPathComponent(),
             URL(fileURLWithPath: fileManager.currentDirectoryPath).resolvingSymlinksInPath(),
-        ]
+        ].compactMap { $0 }
         for candidate in candidates {
             if let root = findWorkspaceRoot(from: candidate) {
                 return URL(fileURLWithPath: root)
                     .appendingPathComponent("tools/compact_dashboard/export_snapshot.py")
                     .path
             }
+        }
+        if let bundled = bundledSnapshotScript() {
+            return bundled
         }
         return "tools/compact_dashboard/export_snapshot.py"
     }

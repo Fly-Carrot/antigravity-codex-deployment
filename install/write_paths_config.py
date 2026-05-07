@@ -24,12 +24,7 @@ def render_paths(values: dict[str, str]) -> str:
     antigravity_brain_root = require(values, "AGF_ANTIGRAVITY_BRAIN_ROOT")
     antigravity_history_root = require(values, "AGF_ANTIGRAVITY_HISTORY_ROOT")
     codex_root = require(values, "AGF_CODEX_ROOT")
-    project_mcp_hub = require(values, "AGF_PROJECT_MCP_HUB")
-    project_3_5 = require(values, "AGF_PROJECT_3_5")
-    project_4 = require(values, "AGF_PROJECT_4")
-    project_5 = require(values, "AGF_PROJECT_5")
-    project_5_5 = require(values, "AGF_PROJECT_5_5")
-    project_design = require(values, "AGF_PROJECT_DESIGN")
+    project_example = require(values, "AGF_PROJECT_EXAMPLE")
 
     lines = [
         "version: 1",
@@ -51,12 +46,7 @@ def render_paths(values: dict[str, str]) -> str:
         f"  codex_root: {yaml_quote(codex_root)}",
         "",
         "  project_roots:",
-        f"    mcp_hub: {yaml_quote(project_mcp_hub)}",
-        f"    project3_5: {yaml_quote(project_3_5)}",
-        f"    project4: {yaml_quote(project_4)}",
-        f"    project5: {yaml_quote(project_5)}",
-        f"    project5_5: {yaml_quote(project_5_5)}",
-        f"    project_design: {yaml_quote(project_design)}",
+        f"    example_workspace: {yaml_quote(project_example)}",
         "",
         "derived:",
         f"  receipts_log: {yaml_quote(global_root + '/sync/receipts.ndjson')}",

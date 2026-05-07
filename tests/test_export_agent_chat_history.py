@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.compact_dashboard.export_agent_chat_history import export_chat_history
+from tools.acquisition.export_agent_chat_history import export_chat_history
 
 
 class ExportAgentChatHistoryTests(unittest.TestCase):

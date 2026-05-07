@@ -10,12 +10,7 @@ from pathlib import Path
 
 
 PROJECT_LAYOUT = [
-    ("AGF_PROJECT_MCP_HUB", "MCP_Hub"),
-    ("AGF_PROJECT_3_5", "Project3.5"),
-    ("AGF_PROJECT_4", "Project4"),
-    ("AGF_PROJECT_5", "Project5"),
-    ("AGF_PROJECT_5_5", "Project 5.5"),
-    ("AGF_PROJECT_DESIGN", "Project Design"),
+    ("AGF_PROJECT_EXAMPLE", "Example Workspace"),
 ]
 
 PLACEHOLDER_GEMINI_RULE = """# Gemini Shared Context
@@ -53,12 +48,12 @@ def derive_values(args: argparse.Namespace) -> dict[str, str]:
     )
     global_root = prompt_path(
         "Shared fabric global root",
-        expand_path(args.global_root or (user_home / "Antigravity_Skills" / "global-agent-fabric")),
+        expand_path(args.global_root or (user_home / "AgentSharedFabric" / "global-agent-fabric")),
         interactive,
     )
     awesome_skills_root = prompt_path(
         "Awesome skills root",
-        expand_path(args.awesome_skills_root or (user_home / "Antigravity_Skills" / "awesome-skills")),
+        expand_path(args.awesome_skills_root or (user_home / "AgentSharedFabric" / "agent-fabric-implementation" / "skills")),
         interactive,
     )
     gemini_root = prompt_path(
@@ -116,12 +111,7 @@ def render_env_file(values: dict[str, str]) -> str:
         "AGF_ANTIGRAVITY_BRAIN_ROOT",
         "AGF_ANTIGRAVITY_HISTORY_ROOT",
         "AGF_CODEX_ROOT",
-        "AGF_PROJECT_MCP_HUB",
-        "AGF_PROJECT_3_5",
-        "AGF_PROJECT_4",
-        "AGF_PROJECT_5",
-        "AGF_PROJECT_5_5",
-        "AGF_PROJECT_DESIGN",
+        "AGF_PROJECT_EXAMPLE",
     ]:
         lines.append(f'{key}="{values[key]}"')
     lines.append("")

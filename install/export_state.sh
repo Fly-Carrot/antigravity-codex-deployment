@@ -43,12 +43,7 @@ is_excluded() {
 project_overlay_key() {
   local candidate="$1"
   case "$candidate" in
-    "$AGF_PROJECT_MCP_HUB"/*) echo "mcp_hub" ;;
-    "$AGF_PROJECT_3_5"/*) echo "project3_5" ;;
-    "$AGF_PROJECT_4"/*) echo "project4" ;;
-    "$AGF_PROJECT_5"/*) echo "project5" ;;
-    "$AGF_PROJECT_5_5"/*) echo "project5_5" ;;
-    "$AGF_PROJECT_DESIGN"/*) echo "project_design" ;;
+    "$AGF_PROJECT_EXAMPLE"/*) echo "example_workspace" ;;
     *) return 1 ;;
   esac
 }
@@ -64,12 +59,7 @@ bundle_relative_path() {
   if key="$(project_overlay_key "$source_path")"; then
     local project_root_var=""
     case "$key" in
-      mcp_hub) project_root_var="$AGF_PROJECT_MCP_HUB" ;;
-      project3_5) project_root_var="$AGF_PROJECT_3_5" ;;
-      project4) project_root_var="$AGF_PROJECT_4" ;;
-      project5) project_root_var="$AGF_PROJECT_5" ;;
-      project5_5) project_root_var="$AGF_PROJECT_5_5" ;;
-      project_design) project_root_var="$AGF_PROJECT_DESIGN" ;;
+      example_workspace) project_root_var="$AGF_PROJECT_EXAMPLE" ;;
     esac
     echo "overlays/$key/${source_path#$project_root_var/}"
     return 0
@@ -113,12 +103,7 @@ done < "$MANIFEST_FILE"
 cat > "$TMP_DIR/metadata/export-info.txt" <<EOF
 created_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 source_global_root=$AGF_GLOBAL_ROOT
-source_project_mcp_hub=$AGF_PROJECT_MCP_HUB
-source_project_3_5=$AGF_PROJECT_3_5
-source_project_4=$AGF_PROJECT_4
-source_project_5=$AGF_PROJECT_5
-source_project_5_5=$AGF_PROJECT_5_5
-source_project_design=$AGF_PROJECT_DESIGN
+source_project_example=$AGF_PROJECT_EXAMPLE
 EOF
 
 mkdir -p "$(dirname "$OUTPUT_ARCHIVE")"

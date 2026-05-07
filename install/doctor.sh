@@ -25,7 +25,7 @@ required_vars=(
   AGF_AWESOME_SKILLS_ROOT
   AGF_GEMINI_RULE
   AGF_ANTIGRAVITY_MCP_CONFIG
-  AGF_PROJECT_MCP_HUB
+  AGF_PROJECT_EXAMPLE
 )
 
 for var_name in "${required_vars[@]}"; do
@@ -55,13 +55,13 @@ done
 
 "$PYTHON_BIN" "$AGF_GLOBAL_ROOT/scripts/sync/preflight_check.py" \
   --global-root "$AGF_GLOBAL_ROOT" \
-  --workspace "$AGF_PROJECT_MCP_HUB" \
+  --workspace "$AGF_PROJECT_EXAMPLE" \
   --agent codex \
   --task-id doctor-check
 
 "$PYTHON_BIN" "$AGF_GLOBAL_ROOT/scripts/sync/sync_all.py" \
   --global-root "$AGF_GLOBAL_ROOT" \
-  --workspace "$AGF_PROJECT_MCP_HUB" \
+  --workspace "$AGF_PROJECT_EXAMPLE" \
   --agent codex \
   --task-id doctor-sync-check \
   --skip-import \

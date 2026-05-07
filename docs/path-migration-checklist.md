@@ -75,7 +75,7 @@ The current `projects/registry.yaml` should be generated from:
 
 The path migration is complete when:
 
-1. No sync script requires `/Users/david_chen/...` to run
+1. No sync script requires `/Users/your_username/...` to run
 2. The framework can be installed under a different username and directory root
 3. `preflight_check.py`, `sync_all.py`, and `postflight_sync.py` work with only:
    - a rendered `paths.yaml`

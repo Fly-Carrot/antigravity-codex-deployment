@@ -11,6 +11,8 @@ MODULE_CACHE_DIR="/tmp/fabric_app/module-cache"
 SWIFT_SRC="$SCRIPT_DIR/FloatingDashboard.swift"
 PLIST_TEMPLATE="$SCRIPT_DIR/DashboardInfo.plist"
 ASSETS_DIR="$SCRIPT_DIR/assets"
+COMPACT_DASHBOARD_SRC="$(cd "$SCRIPT_DIR/../compact_dashboard" && pwd -P)"
+COMPACT_DASHBOARD_BUNDLE_DIR="$RESOURCES_DIR/compact_dashboard"
 STATIC_ICON_SVG="$ASSETS_DIR/fabric-app-icon.svg"
 ICONSET_DIR="$MODULE_CACHE_DIR/Fabric.iconset"
 ICON_FILE="$RESOURCES_DIR/Fabric.icns"
@@ -71,6 +73,16 @@ fi
 
 if [[ -d "$ASSETS_DIR" ]]; then
   rsync -a "$ASSETS_DIR/" "$RESOURCES_DIR/"
+fi
+
+if [[ -d "$COMPACT_DASHBOARD_SRC" ]]; then
+  rm -rf "$COMPACT_DASHBOARD_BUNDLE_DIR"
+  mkdir -p "$COMPACT_DASHBOARD_BUNDLE_DIR"
+  rsync -a \
+    --exclude "__pycache__/" \
+    --exclude "tests/" \
+    "$COMPACT_DASHBOARD_SRC/" \
+    "$COMPACT_DASHBOARD_BUNDLE_DIR/"
 fi
 
 # Finder tends to hold onto stale icon previews if the app bundle mtime does not move.

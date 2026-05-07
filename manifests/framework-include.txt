@@ -1,17 +1,18 @@
-# Framework assets to store in the GitHub framework repository
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/README.md
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/docs/
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/rules/
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/secrets.example.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/architecture.md
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/routes.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/schema.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/ki-registry.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/memory/mempalace-taxonomy.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/projects/registry.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/skills/
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/sync/boot-sequence.md
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/sync/hook-policy.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/sync/runtime-map.yaml
-/Users/david_chen/Antigravity_Skills/global-agent-fabric/scripts/sync/
+# Framework assets to store in the GitHub framework repository.
+# Replace placeholders through install/env.template or install/paths.template.yaml.
+${AGF_GLOBAL_ROOT}/README.md
+${AGF_GLOBAL_ROOT}/docs/
+${AGF_GLOBAL_ROOT}/rules/
+${AGF_GLOBAL_ROOT}/mcp/servers.yaml
+${AGF_GLOBAL_ROOT}/mcp/secrets.example.yaml
+${AGF_GLOBAL_ROOT}/memory/architecture.md
+${AGF_GLOBAL_ROOT}/memory/routes.yaml
+${AGF_GLOBAL_ROOT}/memory/schema.yaml
+${AGF_GLOBAL_ROOT}/memory/ki-registry.yaml
+${AGF_GLOBAL_ROOT}/memory/mempalace-taxonomy.yaml
+${AGF_GLOBAL_ROOT}/projects/registry.yaml
+${AGF_GLOBAL_ROOT}/skills/
+${AGF_GLOBAL_ROOT}/sync/boot-sequence.md
+${AGF_GLOBAL_ROOT}/sync/hook-policy.yaml
+${AGF_GLOBAL_ROOT}/sync/runtime-map.yaml
+${AGF_GLOBAL_ROOT}/scripts/sync/

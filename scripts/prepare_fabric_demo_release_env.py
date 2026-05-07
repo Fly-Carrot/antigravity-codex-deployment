@@ -165,13 +165,7 @@ def prepare_demo_root(root: Path) -> dict[str, str]:
     write_json(
         settings_path,
         {
-            "mcpServers": {
-                "context7": {},
-                "filesystem": {},
-                "memory": {},
-                "browser-use": {},
-                "shared-fabric": {},
-            }
+            "mcpServers": {}
         },
     )
 
@@ -191,19 +185,7 @@ def prepare_demo_root(root: Path) -> dict[str, str]:
         dedent(
             """
             version: 1
-            servers:
-              -
-                id: "context7"
-                enabled: true
-                command: "/bin/true"
-                args: []
-                env_refs: []
-              -
-                id: "browser-use"
-                enabled: true
-                command: "/bin/true"
-                args: []
-                env_refs: []
+            servers: []
             """
         ),
     )

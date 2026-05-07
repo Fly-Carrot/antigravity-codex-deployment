@@ -43,12 +43,7 @@ restore_tree() {
 restore_tree "$PAYLOAD_ROOT/global-agent-fabric/memory" "$AGF_GLOBAL_ROOT/memory"
 restore_tree "$PAYLOAD_ROOT/global-agent-fabric/workflows/imported" "$AGF_GLOBAL_ROOT/workflows/imported"
 
-restore_tree "$PAYLOAD_ROOT/overlays/mcp_hub/.agents" "$AGF_PROJECT_MCP_HUB/.agents"
-restore_tree "$PAYLOAD_ROOT/overlays/project3_5/.agents" "$AGF_PROJECT_3_5/.agents"
-restore_tree "$PAYLOAD_ROOT/overlays/project4/.agents" "$AGF_PROJECT_4/.agents"
-restore_tree "$PAYLOAD_ROOT/overlays/project5/.agents" "$AGF_PROJECT_5/.agents"
-restore_tree "$PAYLOAD_ROOT/overlays/project5_5/.agents" "$AGF_PROJECT_5_5/.agents"
-restore_tree "$PAYLOAD_ROOT/overlays/project_design/.agents" "$AGF_PROJECT_DESIGN/.agents"
+restore_tree "$PAYLOAD_ROOT/overlays/example_workspace/.agents" "$AGF_PROJECT_EXAMPLE/.agents"
 
 echo "restore: ok"
 echo "archive: $STATE_ARCHIVE"

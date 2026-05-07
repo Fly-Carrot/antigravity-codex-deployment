@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_GLOBAL_ROOT = Path("/Users/david_chen/Antigravity_Skills/global-agent-fabric")
-DEFAULT_GEMINI_SETTINGS = Path("/Users/david_chen/.gemini/settings.json")
+DEFAULT_GLOBAL_ROOT = Path.home() / "AgentSharedFabric" / "global-agent-fabric"
+DEFAULT_GEMINI_SETTINGS = Path.home() / ".gemini" / "settings.json"
 AUTO_WORKSPACE_SENTINELS = {"", "auto", "latest"}
 PHASE_ORDER = ["route", "plan", "review", "dispatch", "execute", "report"]
 PHASE_LABELS = {
@@ -334,18 +334,27 @@ def _workspace_exists(path: str | Path | None) -> bool:
         return False
 
 
-def _read_ndjson(path: Path) -> list[dict[str, Any]]:
+def _read_ndjson(path: Path, alerts: list[str] | None = None, label: str | None = None) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     records: list[dict[str, Any]] = []
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    malformed = 0
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        if alerts is not None:
+            alerts.append(f"{label or path.name}: could not read NDJSON ({exc.__class__.__name__}).")
+        return []
+    for raw_line in lines:
         line = raw_line.strip()
         if not line:
             continue
         try:
             records.append(json.loads(line))
         except json.JSONDecodeError:
-            continue
+            malformed += 1
+    if malformed and alerts is not None:
+        alerts.append(f"{label or path.name}: skipped {malformed} malformed NDJSON record(s).")
     return records
 
 
@@ -372,10 +381,17 @@ def _parse_scalar(value: str) -> Any:
     return text
 
 
-def _read_mcp_registry(path: Path) -> list[dict[str, Any]]:
+def _read_mcp_registry(path: Path, alerts: list[str] | None = None) -> list[dict[str, Any]]:
     if not path.exists():
+        if alerts is not None:
+            alerts.append(f"MCP registry missing: {path}")
         return []
-    lines = path.read_text(encoding="utf-8").splitlines()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        if alerts is not None:
+            alerts.append(f"MCP registry unreadable: {path} ({exc.__class__.__name__}).")
+        return []
     servers: list[dict[str, Any]] = []
     in_servers = False
     idx = 0
@@ -412,16 +428,28 @@ def _read_mcp_registry(path: Path) -> list[dict[str, Any]]:
                     key, raw_value = stripped.split(":", 1)
                     server[key] = _parse_scalar(raw_value)
                 idx += 1
-            servers.append(server)
+            if server.get("id"):
+                servers.append(server)
+            elif alerts is not None:
+                alerts.append(f"MCP registry ignored an entry without id in {path.name}.")
             continue
         idx += 1
+    if not in_servers and alerts is not None:
+        alerts.append(f"MCP registry has no top-level servers section: {path}")
     return servers
 
 
-def _read_project_registry(path: Path) -> list[dict[str, str]]:
+def _read_project_registry(path: Path, alerts: list[str] | None = None) -> list[dict[str, str]]:
     if not path.exists():
+        if alerts is not None:
+            alerts.append(f"Project registry missing: {path}")
         return []
-    lines = path.read_text(encoding="utf-8").splitlines()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        if alerts is not None:
+            alerts.append(f"Project registry unreadable: {path} ({exc.__class__.__name__}).")
+        return []
     projects: list[dict[str, str]] = []
     in_projects = False
     idx = 0
@@ -452,8 +480,12 @@ def _read_project_registry(path: Path) -> list[dict[str, str]]:
                 idx += 1
             if project.get("path"):
                 projects.append(project)
+            elif alerts is not None:
+                alerts.append(f"Project registry ignored an entry without path in {path.name}.")
             continue
         idx += 1
+    if not in_projects and alerts is not None:
+        alerts.append(f"Project registry has no top-level projects section: {path}")
     return projects
 
 
@@ -1998,18 +2030,18 @@ def build_state(
     registry_path = global_root_path / "mcp" / "servers.yaml"
     project_registry_path = global_root_path / "projects" / "registry.yaml"
 
-    receipts = _read_ndjson(receipts_path)
-    handoffs = _read_ndjson(handoffs_path)
-    phase_events = _read_ndjson(phase_log_path)
-    learning_receipts = _read_ndjson(learning_receipts_path)
-    registry_projects = _read_project_registry(project_registry_path)
+    alerts: list[str] = []
+    receipts = _read_ndjson(receipts_path, alerts, "receipts")
+    handoffs = _read_ndjson(handoffs_path, alerts, "handoffs")
+    phase_events = _read_ndjson(phase_log_path, alerts, "task phases")
+    learning_receipts = _read_ndjson(learning_receipts_path, alerts, "learning receipts")
+    registry_projects = _read_project_registry(project_registry_path, alerts)
     workspace_path = _resolve_workspace_path(workspace, receipts, handoffs, learning_receipts)
 
     workspace_receipts = [item for item in receipts if _normalize_path(item.get("workspace")) == workspace_path]
     workspace_handoffs = [item for item in handoffs if _normalize_path(item.get("workspace")) == workspace_path]
     workspace_learning = [item for item in learning_receipts if _normalize_path(item.get("workspace")) == workspace_path]
 
-    alerts: list[str] = []
     if _is_auto_workspace(workspace):
         if workspace_path:
             alerts.append("workspace source = auto")
@@ -2095,10 +2127,13 @@ def build_state(
 
     settings_payload = {}
     if gemini_settings_path.exists():
-        settings_payload = json.loads(gemini_settings_path.read_text(encoding="utf-8"))
+        try:
+            settings_payload = json.loads(gemini_settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            alerts.append(f"Gemini settings unreadable: {gemini_settings_path} ({exc.__class__.__name__}).")
     active_mcp_count = len((settings_payload.get("mcpServers") or {}).keys())
 
-    registry_servers = _read_mcp_registry(registry_path)
+    registry_servers = _read_mcp_registry(registry_path, alerts)
     enabled_registry_count = sum(1 for item in registry_servers if item.get("enabled") is True)
     disabled_registry_count = sum(1 for item in registry_servers if item.get("enabled") is False)
     available_workspaces = _build_available_workspaces(

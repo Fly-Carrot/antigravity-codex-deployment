@@ -9,19 +9,14 @@ from typing import Any
 
 from path_config import resolve_global_root, resolve_path
 
-DEFAULT_GLOBAL_ROOT = Path("/Users/david_chen/Antigravity_Skills/global-agent-fabric")
-DEFAULT_AWESOME_SKILLS_ROOT = Path("/Users/david_chen/Antigravity_Skills/awesome-skills")
-DEFAULT_GEMINI_RULE = Path("/Users/david_chen/.gemini/GEMINI.md")
-DEFAULT_MCP_CONFIG = Path("/Users/david_chen/.gemini/antigravity/mcp_config.json")
-DEFAULT_MCP_REGISTRY_SOURCE = Path("/Users/david_chen/Antigravity_Skills/global-agent-fabric/mcp/servers.yaml")
+DEFAULT_GLOBAL_ROOT = Path.home() / "AgentSharedFabric" / "global-agent-fabric"
+DEFAULT_AWESOME_SKILLS_ROOT = Path.home() / "AgentSharedFabric" / "agent-fabric-implementation" / "skills"
+DEFAULT_GEMINI_RULE = Path.home() / ".gemini" / "GEMINI.md"
+DEFAULT_MCP_CONFIG = Path.home() / ".gemini" / "antigravity" / "mcp_config.json"
+DEFAULT_MCP_REGISTRY_SOURCE = DEFAULT_GLOBAL_ROOT / "mcp" / "servers.yaml"
 
 PROJECT_SPECS = [
-    ("mcp-hub", "MCP_Hub", "AGF_PROJECT_MCP_HUB", Path("/Users/david_chen/Desktop/MCP_Hub"), None),
-    ("project3.5", "Project3.5", "AGF_PROJECT_3_5", Path("/Users/david_chen/Desktop/Project3.5"), "ecology"),
-    ("project4", "Project4", "AGF_PROJECT_4", Path("/Users/david_chen/Desktop/Project4"), "ecology"),
-    ("project5", "Project5", "AGF_PROJECT_5", Path("/Users/david_chen/Desktop/Project5"), "ecology"),
-    ("project5.5", "Project 5.5", "AGF_PROJECT_5_5", Path("/Users/david_chen/Desktop/Project 5.5"), "ecology"),
-    ("project-design", "Project Design", "AGF_PROJECT_DESIGN", Path("/Users/david_chen/Desktop/Project Design"), "design"),
+    ("workspace", "Workspace", "AGF_DEFAULT_WORKSPACE", Path.cwd(), None),
 ]
 
 
@@ -246,7 +241,7 @@ def build_overlay_file(project: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Bootstrap a global agent fabric under Antigravity_Skills."
+        description="Bootstrap an Agent Shared Fabric governance root."
     )
     parser.add_argument("--global-root", type=Path, default=None)
     parser.add_argument("--awesome-skills-root", type=Path, default=None)

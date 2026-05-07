@@ -7,9 +7,9 @@
       "command": "/bin/zsh",
       "args": [
         "-lc",
-        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\npython3 \"$GLOBAL_ROOT/scripts/sync/preflight_check.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --emit-receipt\npython3 \"$GLOBAL_ROOT/scripts/sync/sync_all.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --skip-preflight \\\n  --skip-receipt",
+        "set -euo pipefail\nGLOBAL_ROOT=\"${AGF_GLOBAL_ROOT:-$1}\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\npython3 \"$GLOBAL_ROOT/scripts/sync/preflight_check.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --emit-receipt\npython3 \"$GLOBAL_ROOT/scripts/sync/sync_all.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --skip-preflight \\\n  --skip-receipt",
         "--",
-        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+        "${input:sharedFabricGlobalRoot}"
       ],
       "problemMatcher": []
     },
@@ -19,9 +19,9 @@
       "command": "/bin/zsh",
       "args": [
         "-lc",
-        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\npython3 \"$GLOBAL_ROOT/scripts/sync/sync_all.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --skip-preflight \\\n  --skip-receipt",
+        "set -euo pipefail\nGLOBAL_ROOT=\"${AGF_GLOBAL_ROOT:-$1}\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\npython3 \"$GLOBAL_ROOT/scripts/sync/sync_all.py\" \\\n  --global-root \"$GLOBAL_ROOT\" \\\n  --workspace \"$WORKSPACE\" \\\n  --agent \"$AGENT\" \\\n  --task-id \"$TASK_ID\" \\\n  --skip-preflight \\\n  --skip-receipt",
         "--",
-        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+        "${input:sharedFabricGlobalRoot}"
       ],
       "problemMatcher": []
     },
@@ -31,18 +31,21 @@
       "command": "/bin/zsh",
       "args": [
         "-lc",
-        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\nSUMMARY=\"${input:sharedFabricSummary}\"\nDECISION=\"${input:sharedFabricDecision}\"\nOPEN_LOOP=\"${input:sharedFabricOpenLoop}\"\nHANDOFF=\"${input:sharedFabricHandoff}\"\nARGS=(--global-root \"$GLOBAL_ROOT\" --workspace \"$WORKSPACE\" --agent \"$AGENT\" --task-id \"$TASK_ID\" --summary \"$SUMMARY\")\nif [[ -n \"$DECISION\" ]]; then ARGS+=(--decision \"$DECISION\"); fi\nif [[ -n \"$OPEN_LOOP\" ]]; then ARGS+=(--open-loop \"$OPEN_LOOP\"); fi\nif [[ -n \"$HANDOFF\" ]]; then ARGS+=(--handoff \"$HANDOFF\"); fi\npython3 \"$GLOBAL_ROOT/scripts/sync/postflight_sync.py\" \"${ARGS[@]}\"",
+        "set -euo pipefail\nGLOBAL_ROOT=\"${AGF_GLOBAL_ROOT:-$1}\"\nWORKSPACE=\"${workspaceFolder}\"\nAGENT=\"${input:sharedFabricAgent}\"\nTASK_ID=\"${input:sharedFabricTaskId}\"\nif [[ -z \"$TASK_ID\" ]]; then\n  TASK_ID=\"shared-fabric-${AGENT}-$(date +%Y%m%d-%H%M%S)\"\nfi\nSUMMARY=\"${input:sharedFabricSummary}\"\nDECISION=\"${input:sharedFabricDecision}\"\nOPEN_LOOP=\"${input:sharedFabricOpenLoop}\"\nHANDOFF=\"${input:sharedFabricHandoff}\"\nARGS=(--global-root \"$GLOBAL_ROOT\" --workspace \"$WORKSPACE\" --agent \"$AGENT\" --task-id \"$TASK_ID\" --summary \"$SUMMARY\")\nif [[ -n \"$DECISION\" ]]; then ARGS+=(--decision \"$DECISION\"); fi\nif [[ -n \"$OPEN_LOOP\" ]]; then ARGS+=(--open-loop \"$OPEN_LOOP\"); fi\nif [[ -n \"$HANDOFF\" ]]; then ARGS+=(--handoff \"$HANDOFF\"); fi\npython3 \"$GLOBAL_ROOT/scripts/sync/postflight_sync.py\" \"${ARGS[@]}\"",
         "--",
-        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+        "${input:sharedFabricGlobalRoot}"
       ],
       "problemMatcher": []
     },
     {
       "label": "Shared Fabric: Open Global Root",
       "type": "shell",
-      "command": "/usr/bin/open",
+      "command": "/bin/zsh",
       "args": [
-        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+        "-lc",
+        "open \"${AGF_GLOBAL_ROOT:-$1}\"",
+        "--",
+        "${input:sharedFabricGlobalRoot}"
       ],
       "problemMatcher": []
     },
@@ -52,14 +55,20 @@
       "command": "/bin/zsh",
       "args": [
         "-lc",
-        "set -euo pipefail\nGLOBAL_ROOT=\"$1\"\npython3 \"/Users/david_chen/Desktop/antigravity-codex-deployment/install/bootstrap_vscode_workspace.py\" --workspace \"${workspaceFolder}\" --global-root \"$GLOBAL_ROOT\" --runtimes both",
+        "set -euo pipefail\nGLOBAL_ROOT=\"${AGF_GLOBAL_ROOT:-$1}\"\npython3 \"${workspaceFolder}/install/bootstrap_vscode_workspace.py\" --workspace \"${workspaceFolder}\" --global-root \"$GLOBAL_ROOT\" --runtimes both",
         "--",
-        "/Users/david_chen/Antigravity_Skills/global-agent-fabric"
+        "${input:sharedFabricGlobalRoot}"
       ],
       "problemMatcher": []
     }
   ],
   "inputs": [
+    {
+      "id": "sharedFabricGlobalRoot",
+      "type": "promptString",
+      "description": "Global Agent Fabric root. You can also set AGF_GLOBAL_ROOT in your shell.",
+      "default": "/path/to/global-agent-fabric"
+    },
     {
       "id": "sharedFabricAgent",
       "type": "pickString",

@@ -1,12 +1,18 @@
 # Fabric Architecture
 
-Fabric is an LLM-native local knowledge architecture plus a desktop app.
+Fabric is an LLM-native local knowledge workstation that sits on top of an agent governance layer.
 
 The app is important, but it is not the whole system. The larger idea is that agents should not rely on scattered prompts, private chat histories, or accidental local state. They should share one explicit operating fabric, then use Obsidian as a maintained human-readable wiki.
 
+The boundary is:
+
+- **Agent Shared Fabric** is the governance and memory layer.
+- **Fabric App** is the knowledge workbench that consumes receipts, wiki pages, graph data, and source-processing artifacts.
+- **Fabric App is not the source of truth for governance.**
+
 ## 1. Governance Brain
 
-`global-agent-fabric` is the canonical control plane.
+`global-agent-fabric` is the canonical control plane from Agent Shared Fabric.
 
 It owns:
 
@@ -122,4 +128,4 @@ It provides:
 - semantic graph exploration
 - embedded terminal workflows
 
-So the app is the visible control room. The architecture underneath is the shared operating fabric.
+So the app is the visible control room for knowledge maintenance. The governance underneath remains Agent Shared Fabric.

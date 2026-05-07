@@ -1094,6 +1094,48 @@ class DashboardDataTests(unittest.TestCase):
             self.assertEqual(state.available_workspaces[0].source, "manual")
             self.assertEqual(state.available_workspaces[0].label, "manual-workspace")
 
+    def test_build_state_surfaces_malformed_runtime_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            settings_path = self._base_fixture(root, workspace)
+            self._write(
+                root / "sync" / "receipts.ndjson",
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "agent": "codex",
+                                "status_marker": "[BOOT_OK]",
+                                "task_id": "task-live",
+                                "timestamp": "2026-04-20T06:00:00Z",
+                                "workspace": str(workspace),
+                            }
+                        ),
+                        "{not json",
+                    ]
+                )
+                + "\n",
+            )
+
+            state = build_state(workspace=workspace, global_root=root, gemini_settings=settings_path)
+
+            self.assertTrue(any("malformed NDJSON" in alert for alert in state.alerts))
+
+    def test_build_state_surfaces_invalid_gemini_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            settings_path = self._base_fixture(root, workspace)
+            settings_path.write_text("{not json", encoding="utf-8")
+
+            state = build_state(workspace=workspace, global_root=root, gemini_settings=settings_path)
+
+            self.assertEqual(state.active_mcp_count, 0)
+            self.assertTrue(any("Gemini settings unreadable" in alert for alert in state.alerts))
+
 
 if __name__ == "__main__":
     unittest.main()

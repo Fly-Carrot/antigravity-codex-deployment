@@ -7,12 +7,7 @@ from pathlib import Path
 
 
 PROJECTS = [
-    ("mcp-hub", "MCP_Hub", "AGF_PROJECT_MCP_HUB", None),
-    ("project3.5", "Project3.5", "AGF_PROJECT_3_5", "ecology"),
-    ("project4", "Project4", "AGF_PROJECT_4", "ecology"),
-    ("project5", "Project5", "AGF_PROJECT_5", "ecology"),
-    ("project5.5", "Project 5.5", "AGF_PROJECT_5_5", "ecology"),
-    ("project-design", "Project Design", "AGF_PROJECT_DESIGN", "design"),
+    ("example-workspace", "Example Workspace", "AGF_PROJECT_EXAMPLE", None),
 ]
 
 
