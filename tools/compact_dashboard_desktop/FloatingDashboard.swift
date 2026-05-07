@@ -9670,18 +9670,19 @@ func parseConfig() -> DashboardConfig {
     let fileManager = FileManager.default
 
     func findWorkspaceRoot(from start: URL) -> String? {
-        var current = start.resolvingSymlinksInPath()
-        while true {
-            let snapshot = current.appendingPathComponent("tools/compact_dashboard/export_snapshot.py")
-            if fileManager.fileExists(atPath: snapshot.path) {
-                return current.path
+        var current = start.standardizedFileURL.path
+        for _ in 0..<16 {
+            let snapshot = (current as NSString).appendingPathComponent("tools/compact_dashboard/export_snapshot.py")
+            if fileManager.fileExists(atPath: snapshot) {
+                return current
             }
-            let parent = current.deletingLastPathComponent()
-            if parent.path == current.path {
+            let parent = (current as NSString).deletingLastPathComponent
+            if parent == current || parent.isEmpty {
                 return nil
             }
             current = parent
         }
+        return nil
     }
 
     func bundledSnapshotScript() -> String? {
@@ -9726,6 +9727,9 @@ func parseConfig() -> DashboardConfig {
                 return candidate.path
             }
         }
+        if let bundled = bundledSnapshotScript() {
+            return bundled
+        }
 
         let executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let candidates = [
@@ -9740,9 +9744,6 @@ func parseConfig() -> DashboardConfig {
                     .appendingPathComponent("tools/compact_dashboard/export_snapshot.py")
                     .path
             }
-        }
-        if let bundled = bundledSnapshotScript() {
-            return bundled
         }
         return "tools/compact_dashboard/export_snapshot.py"
     }
