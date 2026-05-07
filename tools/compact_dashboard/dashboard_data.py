@@ -232,6 +232,27 @@ class ObserveRollup:
 
 
 @dataclass
+class CapabilityEntry:
+    id: str
+    label: str
+    status: str
+    source: str
+    path: str
+    detail: str
+
+
+@dataclass
+class CapabilityGroup:
+    kind: str
+    title: str
+    configured_count: int
+    enabled_count: int
+    missing_count: int
+    source_path: str
+    entries: list[CapabilityEntry]
+
+
+@dataclass
 class SelectedScope:
     kind: str
     label: str
@@ -276,6 +297,7 @@ class DashboardState:
     knowledge_graph_nodes: list[KnowledgeGraphNode]
     knowledge_graph_edges: list[KnowledgeGraphEdge]
     observe_rollups: list[ObserveRollup]
+    capability_groups: list[CapabilityGroup]
     selected_scope: SelectedScope
     includes_project_memory_details: bool
     includes_question_profile_content: bool
@@ -487,6 +509,167 @@ def _read_project_registry(path: Path, alerts: list[str] | None = None) -> list[
     if not in_projects and alerts is not None:
         alerts.append(f"Project registry has no top-level projects section: {path}")
     return projects
+
+
+def _read_registry_list(path: Path, top_level_key: str, alerts: list[str] | None = None) -> list[dict[str, Any]]:
+    if not path.exists():
+        if alerts is not None:
+            alerts.append(f"{top_level_key} registry missing: {path}")
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        if alerts is not None:
+            alerts.append(f"{top_level_key} registry unreadable: {path} ({exc.__class__.__name__}).")
+        return []
+
+    records: list[dict[str, Any]] = []
+    in_section = False
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx]
+        if line.strip() == f"{top_level_key}:":
+            in_section = True
+            idx += 1
+            continue
+        if not in_section:
+            idx += 1
+            continue
+        if line.startswith("  -"):
+            record: dict[str, Any] = {}
+            idx += 1
+            while idx < len(lines):
+                raw = lines[idx]
+                if raw.startswith("  -") or (raw and not raw.startswith("    ")):
+                    break
+                stripped = raw.strip()
+                if not stripped:
+                    idx += 1
+                    continue
+                if ":" in stripped and not stripped.endswith(":"):
+                    key, raw_value = stripped.split(":", 1)
+                    record[key] = _parse_scalar(raw_value)
+                idx += 1
+            if record:
+                records.append(record)
+            continue
+        idx += 1
+    if not in_section and alerts is not None:
+        alerts.append(f"{top_level_key} registry has no top-level {top_level_key} section: {path}")
+    return records
+
+
+def _entry_label(item: dict[str, Any]) -> str:
+    return str(item.get("name") or item.get("label") or item.get("id") or item.get("path") or "unnamed")
+
+
+def _entry_status(item: dict[str, Any]) -> str:
+    if item.get("enabled") is True:
+        return "enabled"
+    if item.get("enabled") is False:
+        return "disabled"
+    return str(item.get("status") or "configured")
+
+
+def _entry_path(item: dict[str, Any]) -> str:
+    return str(item.get("path") or item.get("root") or item.get("source_path") or item.get("command") or "")
+
+
+def _entry_detail(item: dict[str, Any]) -> str:
+    for key in ("description", "notes", "detail", "type", "command"):
+        value = str(item.get(key) or "").strip()
+        if value:
+            return _shorten(value, 120)
+    return ""
+
+
+def _capability_entry(item: dict[str, Any], source: str) -> CapabilityEntry:
+    label = _entry_label(item)
+    return CapabilityEntry(
+        id=str(item.get("id") or label),
+        label=label,
+        status=_entry_status(item),
+        source=source,
+        path=_entry_path(item),
+        detail=_entry_detail(item),
+    )
+
+
+def _capability_group(
+    *,
+    kind: str,
+    title: str,
+    source_path: Path,
+    items: list[dict[str, Any]],
+    source: str,
+) -> CapabilityGroup:
+    entries = [_capability_entry(item, source) for item in items]
+    return CapabilityGroup(
+        kind=kind,
+        title=title,
+        configured_count=len(entries),
+        enabled_count=sum(1 for item in entries if item.status == "enabled"),
+        missing_count=0 if source_path.exists() else 1,
+        source_path=str(source_path),
+        entries=entries,
+    )
+
+
+def _directory_capability_group(
+    *,
+    kind: str,
+    title: str,
+    root: Path,
+    source: str,
+) -> CapabilityGroup:
+    entries: list[CapabilityEntry] = []
+    if root.exists():
+        for child in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+            if child.name.startswith("."):
+                continue
+            if child.is_dir() or child.suffix.lower() in {".md", ".yaml", ".yml", ".json", ".py"}:
+                entries.append(
+                    CapabilityEntry(
+                        id=child.stem if child.is_file() else child.name,
+                        label=child.stem if child.is_file() else child.name,
+                        status="configured",
+                        source=source,
+                        path=str(child),
+                        detail="Directory" if child.is_dir() else child.suffix.lstrip(".").upper(),
+                    )
+                )
+    return CapabilityGroup(
+        kind=kind,
+        title=title,
+        configured_count=len(entries),
+        enabled_count=len(entries),
+        missing_count=0 if root.exists() else 1,
+        source_path=str(root),
+        entries=entries,
+    )
+
+
+def _resolve_capability_groups(
+    global_root_path: Path,
+    alerts: list[str],
+    *,
+    mcp_items: list[dict[str, Any]] | None = None,
+) -> list[CapabilityGroup]:
+    mcp_path = global_root_path / "mcp" / "servers.yaml"
+    skills_path = global_root_path / "skills" / "sources.yaml"
+    workflows_path = global_root_path / "workflows" / "sources.yaml"
+    agents_root = global_root_path / "agents"
+
+    mcp_items = mcp_items if mcp_items is not None else _read_mcp_registry(mcp_path, alerts)
+    skill_items = _read_registry_list(skills_path, "sources", alerts)
+    workflow_items = _read_registry_list(workflows_path, "sources", alerts)
+
+    return [
+        _capability_group(kind="mcp", title="MCP Servers", source_path=mcp_path, items=mcp_items, source="mcp/servers.yaml"),
+        _capability_group(kind="skills", title="Skill Registries", source_path=skills_path, items=skill_items, source="skills/sources.yaml"),
+        _capability_group(kind="workflows", title="Workflow Registries", source_path=workflows_path, items=workflow_items, source="workflows/sources.yaml"),
+        _directory_capability_group(kind="subagents", title="Subagent Slots", root=agents_root, source="agents/"),
+    ]
 
 
 def _shorten(text: str, width: int = 80) -> str:
@@ -2136,6 +2319,7 @@ def build_state(
     registry_servers = _read_mcp_registry(registry_path, alerts)
     enabled_registry_count = sum(1 for item in registry_servers if item.get("enabled") is True)
     disabled_registry_count = sum(1 for item in registry_servers if item.get("enabled") is False)
+    capability_groups = _resolve_capability_groups(global_root_path, alerts, mcp_items=registry_servers)
     available_workspaces = _build_available_workspaces(
         current_workspace=workspace_path,
         workspace_mode=workspace_mode,
@@ -2218,6 +2402,7 @@ def build_state(
         knowledge_graph_nodes=knowledge_graph_nodes,
         knowledge_graph_edges=knowledge_graph_edges,
         observe_rollups=observe_rollups,
+        capability_groups=capability_groups,
         selected_scope=selected_scope,
         includes_project_memory_details=include_project_memory_details,
         includes_question_profile_content=include_question_profile_content,

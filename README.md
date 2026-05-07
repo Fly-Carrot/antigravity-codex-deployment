@@ -9,12 +9,13 @@
 <p align="center">
   Fabric turns high-volume AI output into a maintained wiki, a semantic graph, and a queryable terminal workflow.
   <br/>
-  It is inspired by the <strong>llm-wiki</strong> pattern: raw sources stay raw, while the wiki becomes the durable synthesis layer.
+  It is an <strong>AI knowledge harness</strong>: it makes agent receipts, preflight registries, source normalization, wiki synthesis, graph navigation, and terminal maintenance visible in one workstation.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/release-v4.0.0-2A76F5?style=flat-square" alt="Release v4.0.0" />
   <img src="https://img.shields.io/badge/platform-macOS-111827?style=flat-square" alt="macOS" />
+  <img src="https://img.shields.io/badge/harness-Agent%20Shared%20Fabric-F59E0B?style=flat-square" alt="Agent Shared Fabric harness" />
   <img src="https://img.shields.io/badge/workflow-LLM--Wiki-0F766E?style=flat-square" alt="LLM-Wiki workflow" />
   <img src="https://img.shields.io/badge/runtime-Codex%20%7C%20Gemini%20CLI-0F172A?style=flat-square" alt="Codex and Gemini CLI" />
   <img src="https://img.shields.io/badge/surfaces-Wiki%20%7C%20Graph%20%7C%20Terminal-334155?style=flat-square" alt="Wiki Graph Terminal" />
@@ -39,6 +40,8 @@ Most agent workflows still stop at one of two weak endpoints:
 
 Fabric closes that gap. Its purpose is **not** to collect more data for its own sake; it is to turn messy AI-era work products into a **living LLM-wiki** that humans and agents can both read, search, visualize, and improve.
 
+It also acts as a **harness console** for the agent system around that wiki. Instead of trusting that a model "probably loaded the right tools", Fabric lets you inspect the preflight state: MCP registries, skill sources, workflow registries, subagent slots, memory lanes, receipts, and phase logs.
+
 It keeps **Agent Shared Fabric** as the canonical cross-agent governance and memory layer, while turning **Obsidian** into a maintained knowledge base with a clear operating model:
 
 - raw sources remain immutable
@@ -58,7 +61,7 @@ At the system level, the complete Fabric architecture has four layers:
 - **Governance brain**: `global-agent-fabric` stores rules, memory routing, project registries, MCP registries, workflow registries, and sync scripts.
 - **Implementation body**: external skill, workflow, MCP, and subagent implementations live outside the governance root so the control plane stays small and portable.
 - **Knowledge base**: Obsidian holds raw sources, maintained wiki pages, semantic indexes, manifests, and graph data.
-- **Workbench**: `Fabric.app` makes setup, monitoring, wiki, source processing, graph navigation, and terminal-based maintenance visible in one place. It consumes artifacts; it is not the governance source of truth.
+- **Workbench**: `Fabric.app` makes setup, preflight harness checks, monitoring, wiki, source processing, graph navigation, and terminal-based maintenance visible in one place. It consumes artifacts; it is not the governance source of truth.
 
 The architecture is deliberately inspired by several proven patterns, without claiming endorsement or affiliation:
 
@@ -81,25 +84,29 @@ See [MCP Integration Guide](docs/mcp-integration-guide.md) before enabling third
 
 Use the setup assistant to establish the shared fabric root, workspace bridge files, and canonical sync workflow that Codex and Gemini CLI both follow.
 
-### 2. Fabric Monitor
+### 2. Preflight Harness
+
+Use the Preflight page to inspect whether Fabric can see your **MCP servers**, **skills**, **workflow registries**, and **subagent slots** before asking an agent to perform serious work.
+
+### 3. Fabric Monitor
 
 ![Fabric monitor](docs/assets/fabric-monitor-view.png)
 
 Watch session health, phases, sync deltas, memory signals, and recent activity in a compact observer that keeps the runtime honest without becoming the product itself.
 
-### 3. Obsidian Wiki Foundation
+### 4. Obsidian Wiki Foundation
 
 ![Fabric wiki](docs/assets/fabric-wiki-view.png)
 
 Treat Obsidian as a maintained wiki layer rather than an export sink. Fabric helps normalize the vault structure, compile project pages, and keep the knowledge base legible.
 
-### 4. Sources + Deep Extraction
+### 5. Sources + Deep Extraction
 
 ![Fabric sources](docs/assets/fabric-sources-view.png)
 
 External tools can stage raw inputs such as NotebookLM notes, agent chats, and shared-fabric snapshots. Fabric then normalizes, clusters, and compiles those materials into project-aware and vault-wide knowledge. Acquisition utilities live outside the core app so the public product stays focused on processing, synthesis, and retrieval.
 
-### 5. Graph + Terminal
+### 6. Graph + Terminal
 
 ![Fabric graph and terminal](docs/assets/fabric-graph-terminal-view.png)
 
@@ -108,6 +115,7 @@ Navigate the semantic graph for exploration, then move directly into the embedde
 ## What You Actually Get
 
 - **Shared Fabric setup + monitoring** for Codex and Gemini CLI
+- **Preflight harness visibility** for MCP, skills, workflows, subagents, and registry health
 - **Obsidian wiki foundation tools** for normalize/process/build flows
 - **Source normalization prompts** for turning raw imports into clean source families
 - **Build-all prompts** for compiling wiki pages, semantic artifacts, and graph data

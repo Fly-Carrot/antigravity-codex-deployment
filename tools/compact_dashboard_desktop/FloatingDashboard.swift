@@ -696,6 +696,37 @@ struct ObserveRollup: Codable, Identifiable {
     }
 }
 
+struct CapabilityEntry: Codable, Identifiable {
+    let id: String
+    let label: String
+    let status: String
+    let source: String
+    let path: String
+    let detail: String
+}
+
+struct CapabilityGroup: Codable, Identifiable {
+    let kind: String
+    let title: String
+    let configuredCount: Int
+    let enabledCount: Int
+    let missingCount: Int
+    let sourcePath: String
+    let entries: [CapabilityEntry]
+
+    var id: String { kind }
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case title
+        case configuredCount = "configured_count"
+        case enabledCount = "enabled_count"
+        case missingCount = "missing_count"
+        case sourcePath = "source_path"
+        case entries
+    }
+}
+
 struct SelectedScope: Codable {
     let kind: String
     let label: String
@@ -746,6 +777,7 @@ struct DashboardSnapshot: Codable {
     let knowledgeGraphNodes: [KnowledgeGraphNode]
     let knowledgeGraphEdges: [KnowledgeGraphEdge]
     let observeRollups: [ObserveRollup]
+    let capabilityGroups: [CapabilityGroup]
     let selectedScope: SelectedScope
     let includesProjectMemoryDetails: Bool
     let includesQuestionProfileContent: Bool
@@ -792,6 +824,7 @@ struct DashboardSnapshot: Codable {
         case knowledgeGraphNodes = "knowledge_graph_nodes"
         case knowledgeGraphEdges = "knowledge_graph_edges"
         case observeRollups = "observe_rollups"
+        case capabilityGroups = "capability_groups"
         case selectedScope = "selected_scope"
         case includesProjectMemoryDetails = "includes_project_memory_details"
         case includesQuestionProfileContent = "includes_question_profile_content"
@@ -832,6 +865,7 @@ enum DashboardSurfaceMode: String, CaseIterable, Identifiable {
     case chat
     case sources
     case wiki
+    case preflight
     case observe
 
     var id: String { rawValue }
@@ -846,6 +880,8 @@ enum DashboardSurfaceMode: String, CaseIterable, Identifiable {
             return "Sources"
         case .wiki:
             return "Wiki"
+        case .preflight:
+            return "Preflight"
         case .observe:
             return "Observe"
         }
@@ -861,6 +897,8 @@ enum DashboardSurfaceMode: String, CaseIterable, Identifiable {
             return "Raw sources, imports, and capture actions"
         case .wiki:
             return "Maintained pages and wiki outputs"
+        case .preflight:
+            return "MCP, skills, workflows, and subagent registry visibility"
         case .observe:
             return "Live sync, phase, and memory observability"
         }
@@ -1003,7 +1041,7 @@ final class DashboardPreferences: ObservableObject {
         self.globalRootOverride = ""
         self.obsidianVaultRoot = ""
         self.obsidianChatHistoryOutputDir = defaultObsidianRawSourcesDir
-        self.surfaceMode = .graph
+        self.surfaceMode = .preflight
         self.scopeMode = .workspace
         self.geminiChatScopeMode = .workspace
         self.showQuestionProfile = true
@@ -1031,6 +1069,9 @@ final class DashboardPreferences: ObservableObject {
         refreshInterval = storedRefresh > 0 ? storedRefresh : 2.0
         globalRootOverride = defaults.string(forKey: Keys.globalRootOverride) ?? ""
         obsidianVaultRoot = defaults.string(forKey: Keys.obsidianVaultRoot) ?? ""
+        if obsidianVaultRoot.contains("/tmp/fabric-release-demo") {
+            obsidianVaultRoot = ""
+        }
         let storedOutputDir = defaults.string(forKey: Keys.obsidianChatHistoryOutputDir) ?? ""
         obsidianChatHistoryOutputDir = storedOutputDir.isEmpty ? defaultObsidianRawSourcesDir : storedOutputDir
         if defaults.object(forKey: Keys.showQuestionProfile) != nil {
@@ -1059,15 +1100,15 @@ final class DashboardPreferences: ObservableObject {
             workspaceMode = .pinned
             pinnedWorkspace = initialWorkspace
         }
+        if pinnedWorkspace.contains("/tmp/fabric-release-demo") && config.initialWorkspace?.isEmpty != false {
+            workspaceMode = .auto
+            pinnedWorkspace = ""
+        }
         if let forcedGlobalRootOverride {
             globalRootOverride = forcedGlobalRootOverride
         }
         if let forcedObsidianVaultRoot {
             obsidianVaultRoot = forcedObsidianVaultRoot
-        } else if obsidianVaultRoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           FileManager.default.fileExists(atPath: defaultObsidianVaultRoot)
-        {
-            obsidianVaultRoot = defaultObsidianVaultRoot
         }
 
         isLoading = false
@@ -1158,10 +1199,10 @@ final class DashboardPreferences: ObservableObject {
         if let forcedObsidianVaultRoot {
             obsidianVaultRoot = forcedObsidianVaultRoot
         } else {
-            obsidianVaultRoot = FileManager.default.fileExists(atPath: defaultObsidianVaultRoot) ? defaultObsidianVaultRoot : ""
+            obsidianVaultRoot = ""
         }
         obsidianChatHistoryOutputDir = defaultObsidianRawSourcesDir
-        surfaceMode = .graph
+        surfaceMode = .preflight
         scopeMode = .workspace
         geminiChatScopeMode = .workspace
         showQuestionProfile = true
@@ -2280,6 +2321,7 @@ struct SetupAssistantView: View {
     let onChooseWorkspace: () -> Void
     let onUseCurrentWorkspace: () -> Void
     let onRunStorageSetup: () -> Void
+    let onValidateStructure: () -> Void
     let onRunWorkspaceSetup: () -> Void
     let onOpenGlobalRoot: () -> Void
     let onClose: () -> Void
@@ -2313,6 +2355,8 @@ struct SetupAssistantView: View {
                     .foregroundStyle(.secondary)
                 HStack {
                     Spacer()
+                    Button("Validate", action: onValidateStructure)
+                        .disabled(viewModel.isRunning || viewModel.globalRoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button("Create Storage Root", action: onRunStorageSetup)
                         .buttonStyle(.borderedProminent)
                         .tint(.blue)
@@ -3237,6 +3281,7 @@ struct DashboardRootView: View {
     @State private var showGraphControls = false
     @State private var selectedWikiDocumentPath = ""
     @State private var selectedSourceDocumentPath = ""
+    @State private var suppressStartup = false
     var body: some View {
         ZStack {
             LinearGradient(
@@ -3261,14 +3306,19 @@ struct DashboardRootView: View {
             .ignoresSafeArea()
 
             if let snapshot = viewModel.snapshot {
-                HStack(spacing: 0) {
-                    projectRail(snapshot: snapshot)
-                    VStack(spacing: 0) {
-                        chromeBar(snapshot: snapshot)
-                        mainWorkbench(snapshot: snapshot)
+                if shouldShowStartup(snapshot) {
+                    startupWorkbench(snapshot: snapshot)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    HStack(spacing: 0) {
+                        projectRail(snapshot: snapshot)
+                        VStack(spacing: 0) {
+                            chromeBar(snapshot: snapshot)
+                            mainWorkbench(snapshot: snapshot)
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 10) {
                     ProgressView()
@@ -3307,7 +3357,104 @@ struct DashboardRootView: View {
     }
 
     private var sidebarSurfaceModes: [DashboardSurfaceMode] {
-        [.graph, .wiki, .sources]
+        [.graph, .wiki, .sources, .preflight]
+    }
+
+    private func shouldShowStartup(_ snapshot: DashboardSnapshot) -> Bool {
+        let noWorkspace = snapshot.workspace.isEmpty || snapshot.projectName == "(no workspace)"
+        let noRuntimeState = snapshot.bootStatus != "OK" && snapshot.syncStatus != "OK" && snapshot.availableWorkspaces.isEmpty
+        let noKnowledgeBase = !snapshot.knowledgeBaseOverview.isConfigured || snapshot.knowledgeBaseOverview.vaultRoot.isEmpty
+        let noCapabilities = snapshot.capabilityGroups.allSatisfy { $0.configuredCount == 0 || $0.missingCount > 0 }
+        return !suppressStartup && noWorkspace && noRuntimeState && noKnowledgeBase && noCapabilities
+    }
+
+    private func startupWorkbench(snapshot: DashboardSnapshot) -> some View {
+        VStack(spacing: 24) {
+            SharedFabricMark()
+                .frame(width: 74, height: 74)
+            VStack(spacing: 8) {
+                Text("Welcome to Fabric")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                Text("Set up the Agent Shared Fabric harness first, then connect your Obsidian wiki and extension body.")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 560)
+            }
+            HStack(spacing: 12) {
+                startupStepCard(
+                    number: "1",
+                    title: "Create governance brain",
+                    detail: "Validate or create the global-agent-fabric root, hooks, sync scripts, memory lanes, and registries.",
+                    symbol: "brain.head.profile"
+                )
+                startupStepCard(
+                    number: "2",
+                    title: "Attach extension body",
+                    detail: "Point Fabric at your MCP, skills, workflows, and subagent slots without copying them into the brain.",
+                    symbol: "shippingbox"
+                )
+                startupStepCard(
+                    number: "3",
+                    title: "Build the LLM-wiki",
+                    detail: "Normalize raw sources, compile wiki pages, and explore the graph/terminal workstation.",
+                    symbol: "point.3.connected.trianglepath.dotted"
+                )
+            }
+            HStack(spacing: 12) {
+                Button(action: onOpenSetup) {
+                    Label("Start Setup", systemImage: "wrench.and.screwdriver")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.mint)
+                Button(action: {
+                    preferences.surfaceMode = .preflight
+                    suppressStartup = true
+                }) {
+                    Label("Inspect Preflight", systemImage: "checklist.checked")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.bordered)
+            }
+            Text("No demo workspace is loaded by default. Release demos are opt-in through `scripts/launch_fabric_demo.sh`.")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+        .padding(40)
+    }
+
+    private func startupStepCard(number: String, title: String, detail: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(number)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.85))
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(Color.mint))
+                Spacer()
+                Image(systemName: symbol)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.mint)
+            }
+            Text(title)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+            Text(detail)
+                .font(.system(size: 11, weight: .regular, design: .rounded))
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+        }
+        .padding(16)
+        .frame(width: 220, height: 164, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.055))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        )
     }
 
     private func projectRail(snapshot: DashboardSnapshot) -> some View {
@@ -3756,6 +3903,8 @@ struct DashboardRootView: View {
                     wikiStage(snapshot: snapshot)
                 case .sources:
                     sourcesStage(snapshot: snapshot)
+                case .preflight:
+                    preflightStage(snapshot: snapshot)
                 }
             }
             .id(preferences.surfaceMode)
@@ -3855,6 +4004,19 @@ struct DashboardRootView: View {
                 .frame(height: totalHeight, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, maxHeight: totalHeight, alignment: .topLeading)
+        }
+    }
+
+    private func preflightStage(snapshot: DashboardSnapshot) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                preflightSummaryCard(snapshot: snapshot)
+                capabilityMatrixCard(snapshot: snapshot)
+                if !snapshot.alerts.isEmpty {
+                    preflightAlertsCard(snapshot: snapshot)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
@@ -4909,6 +5071,8 @@ renderMarkdown(RAW_MARKDOWN);
             return "tray.and.arrow.down"
         case .wiki:
             return "book.closed"
+        case .preflight:
+            return "checklist.checked"
         case .observe:
             return "eye"
         }
@@ -5070,6 +5234,8 @@ renderMarkdown(RAW_MARKDOWN);
                 sourcesWorkbench(snapshot: snapshot)
             case .wiki:
                 wikiWorkbench(snapshot: snapshot)
+            case .preflight:
+                preflightWorkbench(snapshot: snapshot)
             case .observe:
                 observeWorkbench(snapshot: snapshot)
             }
@@ -5139,6 +5305,18 @@ renderMarkdown(RAW_MARKDOWN);
 
     private func sourcesWorkbench(snapshot: DashboardSnapshot) -> some View {
         sourcesCard(snapshot: snapshot)
+    }
+
+    private func preflightWorkbench(snapshot: DashboardSnapshot) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                preflightSummaryCard(snapshot: snapshot)
+                capabilityMatrixCard(snapshot: snapshot)
+                if !snapshot.alerts.isEmpty {
+                    preflightAlertsCard(snapshot: snapshot)
+                }
+            }
+        }
     }
 
     private func inspector(snapshot: DashboardSnapshot) -> some View {
@@ -5243,6 +5421,16 @@ renderMarkdown(RAW_MARKDOWN);
                             .font(.system(size: 11, weight: .regular, design: .rounded))
                             .foregroundStyle(.secondary)
                             .lineLimit(5)
+                    }
+                }
+            case .preflight:
+                inspectorSection(title: "Preflight") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        surfaceInfoRow(title: "MCP", value: "\(snapshot.enabledRegistryCount) enabled")
+                        surfaceInfoRow(title: "Skills", value: capabilityCount(snapshot, kind: "skills"))
+                        surfaceInfoRow(title: "Flows", value: capabilityCount(snapshot, kind: "workflows"))
+                        surfaceInfoRow(title: "Agents", value: capabilityCount(snapshot, kind: "subagents"))
+                        compactActionButton("Open Setup", symbol: "wrench.and.screwdriver", tint: .mint, action: onOpenSetup)
                     }
                 }
             case .chat:
@@ -6540,6 +6728,135 @@ LEGEND.forEach(item => {
         )
     }
 
+    private func preflightSummaryCard(snapshot: DashboardSnapshot) -> some View {
+        DashboardCard(title: "Preflight Harness", symbol: "checklist.checked") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    StatusBadge(label: "Boot", value: snapshot.bootStatus, color: snapshot.bootStatus == "OK" ? .green : .orange)
+                    StatusBadge(label: "MCP", value: "\(snapshot.enabledRegistryCount) / \(snapshot.enabledRegistryCount + snapshot.disabledRegistryCount)", color: .blue)
+                    StatusBadge(label: "Skills", value: capabilityCount(snapshot, kind: "skills"), color: .mint)
+                    StatusBadge(label: "Agents", value: capabilityCount(snapshot, kind: "subagents"), color: .indigo)
+                }
+                Text("Preflight is the harness checkpoint: it tells you whether Fabric can see the governance brain, extension body registries, MCP definitions, skills, workflows, and subagent slots before an agent starts serious work.")
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    actionTile(title: "Validate Structure", subtitle: "Open setup to create or verify the shared fabric roots", tint: .mint, action: onOpenSetup)
+                    actionTile(title: "Refresh", subtitle: "Re-read preflight registries and receipts", tint: .cyan, action: onRefresh)
+                }
+            }
+        }
+    }
+
+    private func capabilityMatrixCard(snapshot: DashboardSnapshot) -> some View {
+        DashboardCard(title: "Extension Body", symbol: "shippingbox") {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
+                ForEach(snapshot.capabilityGroups) { group in
+                    capabilityGroupTile(group)
+                }
+            }
+        }
+    }
+
+    private func preflightAlertsCard(snapshot: DashboardSnapshot) -> some View {
+        DashboardCard(title: "Preflight Alerts", symbol: "exclamationmark.triangle") {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(snapshot.alerts.prefix(8), id: \.self) { alert in
+                    bulletRow(symbol: "exclamationmark.circle", text: alert, tint: .orange)
+                }
+            }
+        }
+    }
+
+    private func capabilityGroupTile(_ group: CapabilityGroup) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(group.title)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    Text(group.sourcePath)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text(group.missingCount > 0 ? "Missing" : "\(group.configuredCount)")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(group.missingCount > 0 ? .orange : .primary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Capsule(style: .continuous).fill(Color.white.opacity(0.07)))
+            }
+            if group.entries.isEmpty {
+                Text(group.missingCount > 0 ? "Registry path is not present yet." : "No entries configured yet.")
+                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(group.entries.prefix(5)) { entry in
+                        capabilityEntryRow(entry)
+                    }
+                    if group.entries.count > 5 {
+                        Text("+ \(group.entries.count - 5) more")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.white.opacity(0.045))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+
+    private func capabilityEntryRow(_ entry: CapabilityEntry) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Circle()
+                .fill(capabilityStatusColor(entry.status))
+                .frame(width: 7, height: 7)
+                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.label)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                if !entry.detail.isEmpty {
+                    Text(entry.detail)
+                        .font(.system(size: 9, weight: .regular, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 4)
+            Text(entry.status.uppercased())
+                .font(.system(size: 8, weight: .bold, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func capabilityStatusColor(_ status: String) -> Color {
+        switch status.lowercased() {
+        case "enabled", "configured":
+            return .green
+        case "disabled":
+            return .secondary
+        default:
+            return .orange
+        }
+    }
+
+    private func capabilityCount(_ snapshot: DashboardSnapshot, kind: String) -> String {
+        guard let group = snapshot.capabilityGroups.first(where: { $0.kind == kind }) else {
+            return "0"
+        }
+        return "\(group.configuredCount)"
+    }
+
     private func sessionCard(snapshot: DashboardSnapshot) -> some View {
         DashboardCard(title: "Session", symbol: "terminal") {
             VStack(alignment: .leading, spacing: 10) {
@@ -7281,6 +7598,7 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
                 self.setupViewModel?.workspacePath = current
             },
             onRunStorageSetup: { [weak self] in self?.runStorageSetup() },
+            onValidateStructure: { [weak self] in self?.validateStorageStructure() },
             onRunWorkspaceSetup: { [weak self] in self?.runWorkspaceSetup() },
             onOpenGlobalRoot: { [weak self] in
                 guard let path = self?.setupViewModel?.globalRoot else { return }
@@ -9017,6 +9335,12 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
     }
 
     private func setupScriptURL(named fileName: String) -> URL? {
+        if let resourceURL = Bundle.main.resourceURL {
+            let bundled = resourceURL.appendingPathComponent("install/\(fileName)")
+            if FileManager.default.fileExists(atPath: bundled.path) {
+                return bundled
+            }
+        }
         guard let repoRoot = config.repositoryRoot else { return nil }
         return URL(fileURLWithPath: repoRoot).appendingPathComponent("install/\(fileName)")
     }
@@ -9069,6 +9393,69 @@ final class FloatingDashboardController: NSObject, NSWindowDelegate {
                 viewModel.statusDetails = error.localizedDescription
                 self.viewModel.recordOperation(
                     title: "Shared fabric storage setup failed",
+                    detail: error.localizedDescription,
+                    status: .failed,
+                    commandPreview: command.joined(separator: " "),
+                    workspace: globalRoot,
+                    category: "Setup"
+                )
+            }
+        }
+    }
+
+    private func validateStorageStructure() {
+        guard let viewModel = setupViewModel else { return }
+        let globalRoot = viewModel.globalRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !globalRoot.isEmpty else { return }
+        guard let scriptURL = setupScriptURL(named: "bootstrap_shared_fabric.py") else {
+            viewModel.statusTitle = "Setup script missing"
+            viewModel.statusDetails = "Could not locate install/bootstrap_shared_fabric.py from the app bundle or current repository."
+            return
+        }
+
+        let command = ["python3", scriptURL.path, "--global-root", globalRoot, "--non-interactive", "--check-only"]
+        viewModel.commandPreview = command.joined(separator: " ")
+        viewModel.isRunning = true
+        viewModel.statusTitle = "Validating structure…"
+        viewModel.statusDetails = "Checking governance brain and extension body paths without writing files."
+
+        runSetupCommand(command) { [weak self] result in
+            guard let self, let viewModel = self.setupViewModel else { return }
+            viewModel.isRunning = false
+            switch result {
+            case .success(let payload):
+                let status = (payload["status"] as? String) ?? "unknown"
+                let missingGlobal = (payload["missing_global"] as? [Any])?.count ?? 0
+                let missingBody = (payload["missing_body"] as? [Any])?.count ?? 0
+                let missingFramework = (payload["missing_framework"] as? [Any])?.count ?? 0
+                if status == "ready" {
+                    viewModel.statusTitle = "Structure ready"
+                    viewModel.statusDetails = "Governance brain, implementation body, and bundled framework assets are all present."
+                    self.viewModel.recordOperation(
+                        title: "Shared fabric structure validated",
+                        detail: "No missing governance, body, or framework paths were reported.",
+                        status: .completed,
+                        commandPreview: command.joined(separator: " "),
+                        workspace: globalRoot,
+                        category: "Setup"
+                    )
+                } else {
+                    viewModel.statusTitle = "Structure needs setup"
+                    viewModel.statusDetails = "Missing paths: governance \(missingGlobal), body \(missingBody), framework \(missingFramework). Use Create Storage Root to repair or create the structure."
+                    self.viewModel.recordOperation(
+                        title: "Shared fabric structure needs setup",
+                        detail: viewModel.statusDetails,
+                        status: .failed,
+                        commandPreview: command.joined(separator: " "),
+                        workspace: globalRoot,
+                        category: "Setup"
+                    )
+                }
+            case .failure(let error):
+                viewModel.statusTitle = "Validation failed"
+                viewModel.statusDetails = error.localizedDescription
+                self.viewModel.recordOperation(
+                    title: "Shared fabric validation failed",
                     detail: error.localizedDescription,
                     status: .failed,
                     commandPreview: command.joined(separator: " "),
@@ -9376,7 +9763,7 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
 
     private func performInitialSetupCheckIfNeeded() {
         let defaults = UserDefaults.standard
-        let currentVersion = "setup-assistant-v1"
+        let currentVersion = "setup-assistant-v2"
         guard defaults.string(forKey: LaunchKeys.setupCheckVersion) != currentVersion else {
             return
         }
@@ -9389,7 +9776,7 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
             guard let self else { return }
             switch self.assessSetupEnvironment(globalRoot: globalRoot) {
             case .ready:
-                self.presentEnvironmentReadyAlert(for: controller, globalRoot: globalRoot)
+                return
             case .incomplete(let missing):
                 self.presentEnvironmentIncompleteAlert(for: controller, globalRoot: globalRoot, missing: missing)
             }
@@ -9445,6 +9832,8 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Later")
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
+            controller.openSetupWindow()
+        } else if controller.currentSnapshot?.workspace.isEmpty ?? true {
             controller.openSetupWindow()
         }
     }

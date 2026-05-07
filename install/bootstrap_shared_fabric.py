@@ -155,6 +155,11 @@ def ensure_layout(values: dict[str, str]) -> list[str]:
         )
 
     mkdir(expand_path(values["AGF_GLOBAL_ROOT"]))
+    implementation_root = expand_path(values["AGF_AWESOME_SKILLS_ROOT"]).parent
+    mkdir(implementation_root)
+    mkdir(implementation_root / "mcp")
+    mkdir(implementation_root / "agents")
+    mkdir(implementation_root / "workflows")
     mkdir(expand_path(values["AGF_AWESOME_SKILLS_ROOT"]))
     mkdir(expand_path(values["AGF_AWESOME_SKILLS_ROOT"]) / "skills")
     mkdir(expand_path(values["AGF_AWESOME_SKILLS_ROOT"]) / "data")
@@ -173,6 +178,51 @@ def ensure_layout(values: dict[str, str]) -> list[str]:
     ensure_json(expand_path(values["AGF_GEMINI_SETTINGS"]), {})
     ensure_json(expand_path(values["AGF_ANTIGRAVITY_MCP_CONFIG"]), {"mcpServers": {}})
     return created
+
+
+def inspect_layout(values: dict[str, str]) -> dict[str, object]:
+    framework_source_root = expand_path(values["AGF_FRAMEWORK_SOURCE_ROOT"])
+    global_root = expand_path(values["AGF_GLOBAL_ROOT"])
+    implementation_root = expand_path(values["AGF_AWESOME_SKILLS_ROOT"]).parent
+
+    framework_required = [
+        framework_source_root / "scripts" / "sync" / "bootstrap_global_agent_fabric.py",
+        framework_source_root / "scripts" / "sync" / "preflight_check.py",
+        framework_source_root / "scripts" / "sync" / "sync_all.py",
+        framework_source_root / "scripts" / "sync" / "postflight_sync.py",
+        framework_source_root / "sync" / "boot-sequence.md",
+        framework_source_root / "memory" / "architecture.md",
+        framework_source_root / "memory" / "schema.yaml",
+        framework_source_root / "mcp" / "servers.yaml",
+    ]
+    global_required = [
+        global_root / "sync" / "boot-sequence.md",
+        global_root / "memory" / "architecture.md",
+        global_root / "memory" / "schema.yaml",
+        global_root / "mcp" / "servers.yaml",
+        global_root / "projects" / "registry.yaml",
+        global_root / "scripts" / "sync" / "preflight_check.py",
+        global_root / "scripts" / "sync" / "sync_all.py",
+        global_root / "scripts" / "sync" / "postflight_sync.py",
+    ]
+    body_required = [
+        implementation_root,
+        expand_path(values["AGF_AWESOME_SKILLS_ROOT"]),
+        implementation_root / "mcp",
+        implementation_root / "agents",
+    ]
+    missing_framework = [str(path) for path in framework_required if not path.exists()]
+    missing_global = [str(path) for path in global_required if not path.exists()]
+    missing_body = [str(path) for path in body_required if not path.exists()]
+    return {
+        "status": "ready" if not (missing_framework or missing_global or missing_body) else "needs_setup",
+        "framework_source_root": str(framework_source_root),
+        "global_root": str(global_root),
+        "implementation_body": str(implementation_root),
+        "missing_framework": missing_framework,
+        "missing_global": missing_global,
+        "missing_body": missing_body,
+    }
 
 
 def build_install_command(env_file: Path, paths_output: Path, state_archive: Path | None) -> list[str]:
@@ -206,6 +256,7 @@ def main() -> int:
     parser.add_argument("--codex-root", type=Path, default=None)
     parser.add_argument("--non-interactive", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
 
     env_file = expand_path(args.env_file or (Path(__file__).resolve().parent / ".env.local"))
@@ -213,6 +264,11 @@ def main() -> int:
     state_archive = expand_path(args.state_archive) if args.state_archive else None
 
     values = derive_values(args)
+
+    if args.check_only:
+        print(json.dumps(inspect_layout(values), ensure_ascii=False, indent=2))
+        return 0
+
     created_paths = ensure_layout(values)
 
     env_file.parent.mkdir(parents=True, exist_ok=True)
