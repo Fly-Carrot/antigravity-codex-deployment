@@ -42,7 +42,7 @@ This includes:
 In a local install, the body root is usually a sibling of the governance root:
 
 ```text
-/path/to/antigravity-implementation
+/path/to/agent-fabric-implementation
 ```
 
 The brain points to this body through YAML registries. That is the important boundary: the brain routes; the body executes.

@@ -19,6 +19,41 @@ PLACEHOLDER_GEMINI_RULE = """# Gemini Shared Context
 - Replace this placeholder with your real global Gemini rule set when available.
 """
 
+GOVERNANCE_STRUCTURE_CHECK = """# Governance Brain Structure Check
+
+This root is the fixed Agent Shared Fabric harness. It should contain governance, sync contracts, memory lanes, and registries, not heavy implementation code.
+
+Required directories and files:
+
+- `rules/global/`
+- `scripts/sync/preflight_check.py`
+- `scripts/sync/sync_all.py`
+- `scripts/sync/log_task_phase.py`
+- `scripts/sync/postflight_sync.py`
+- `sync/boot-sequence.md`
+- `memory/schema.yaml`
+- `mcp/servers.yaml`
+- `skills/sources.yaml`
+- `workflows/sources.yaml`
+- `projects/registry.yaml`
+
+External MCP, skills, workflows, and subagents are referenced by registry, not copied wholesale into this brain.
+"""
+
+IMPLEMENTATION_STRUCTURE_CHECK = """# Implementation Body Structure Check
+
+This root is the user-owned extension body. It may be empty on first install, but it gives users a predictable place to attach real capability.
+
+Suggested directories:
+
+- `skills/` for curated, local, generated, or domain skill repositories
+- `mcp/` for user-owned MCP server implementations
+- `workflows/` for reusable prompt workflows
+- `agents/` for custom subagents or orchestration adapters
+
+The governance brain is fixed. This body is intentionally customizable.
+"""
+
 
 def expand_path(value: str | Path) -> Path:
     return Path(value).expanduser().resolve()
@@ -51,9 +86,10 @@ def derive_values(args: argparse.Namespace) -> dict[str, str]:
         expand_path(args.global_root or (user_home / "AgentSharedFabric" / "global-agent-fabric")),
         interactive,
     )
+    default_implementation_root = global_root.parent / "agent-fabric-implementation"
     awesome_skills_root = prompt_path(
         "Awesome skills root",
-        expand_path(args.awesome_skills_root or (user_home / "AgentSharedFabric" / "agent-fabric-implementation" / "skills")),
+        expand_path(args.awesome_skills_root or (default_implementation_root / "skills")),
         interactive,
     )
     gemini_root = prompt_path(
@@ -175,6 +211,8 @@ def ensure_layout(values: dict[str, str]) -> list[str]:
         mkdir(workspace / ".agents")
 
     ensure_text(expand_path(values["AGF_GEMINI_RULE"]), PLACEHOLDER_GEMINI_RULE)
+    ensure_text(expand_path(values["AGF_GLOBAL_ROOT"]) / "STRUCTURE-CHECK.md", GOVERNANCE_STRUCTURE_CHECK)
+    ensure_text(implementation_root / "STRUCTURE-CHECK.md", IMPLEMENTATION_STRUCTURE_CHECK)
     ensure_json(expand_path(values["AGF_GEMINI_SETTINGS"]), {})
     ensure_json(expand_path(values["AGF_ANTIGRAVITY_MCP_CONFIG"]), {"mcpServers": {}})
     return created
@@ -201,15 +239,18 @@ def inspect_layout(values: dict[str, str]) -> dict[str, object]:
         global_root / "memory" / "schema.yaml",
         global_root / "mcp" / "servers.yaml",
         global_root / "projects" / "registry.yaml",
+        global_root / "STRUCTURE-CHECK.md",
         global_root / "scripts" / "sync" / "preflight_check.py",
         global_root / "scripts" / "sync" / "sync_all.py",
         global_root / "scripts" / "sync" / "postflight_sync.py",
     ]
     body_required = [
         implementation_root,
+        implementation_root / "STRUCTURE-CHECK.md",
         expand_path(values["AGF_AWESOME_SKILLS_ROOT"]),
         implementation_root / "mcp",
         implementation_root / "agents",
+        implementation_root / "workflows",
     ]
     missing_framework = [str(path) for path in framework_required if not path.exists()]
     missing_global = [str(path) for path in global_required if not path.exists()]

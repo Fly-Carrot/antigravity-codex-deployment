@@ -837,10 +837,17 @@ struct DashboardSnapshot: Codable {
     }
 }
 
-let defaultGlobalRoot = appHomeDirectory
+let antigravitySkillsGlobalRoot = appHomeDirectory
+    .appendingPathComponent("Antigravity_Skills")
+    .appendingPathComponent("global-agent-fabric")
+    .path
+let agentSharedFabricGlobalRoot = appHomeDirectory
     .appendingPathComponent("AgentSharedFabric")
     .appendingPathComponent("global-agent-fabric")
     .path
+let defaultGlobalRoot = FileManager.default.fileExists(atPath: antigravitySkillsGlobalRoot)
+    ? antigravitySkillsGlobalRoot
+    : agentSharedFabricGlobalRoot
 let defaultObsidianVaultRoot = appHomeDirectory
     .appendingPathComponent("Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian Memory")
     .path
@@ -854,6 +861,48 @@ let phaseLabels = [
     "execute": "Execute",
     "report": "Report",
 ]
+
+func standardizedDashboardPath(_ rawPath: String) -> String {
+    let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return "" }
+    let expanded = (trimmed as NSString).expandingTildeInPath
+    return URL(fileURLWithPath: expanded).standardizedFileURL.path
+}
+
+func isFabricDemoPath(_ rawPath: String) -> Bool {
+    let path = standardizedDashboardPath(rawPath)
+    guard !path.isEmpty else { return false }
+    return path.contains("/fabric-release-demo")
+}
+
+func directoryExists(_ rawPath: String) -> Bool {
+    let path = standardizedDashboardPath(rawPath)
+    guard !path.isEmpty else { return false }
+    var isDirectory: ObjCBool = false
+    return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+}
+
+func derivedGlobalRoot(forWorkspace workspace: String?) -> String {
+    let fileManager = FileManager.default
+    if let workspace {
+        let workspacePath = standardizedDashboardPath(workspace)
+        if !workspacePath.isEmpty {
+            if URL(fileURLWithPath: workspacePath).lastPathComponent == "global-agent-fabric", directoryExists(workspacePath) {
+                return workspacePath
+            }
+            let workspaceCandidate = URL(fileURLWithPath: workspacePath)
+                .appendingPathComponent("global-agent-fabric")
+                .path
+            if fileManager.fileExists(atPath: workspaceCandidate) {
+                return standardizedDashboardPath(workspaceCandidate)
+            }
+        }
+    }
+    if fileManager.fileExists(atPath: antigravitySkillsGlobalRoot) {
+        return standardizedDashboardPath(antigravitySkillsGlobalRoot)
+    }
+    return standardizedDashboardPath(agentSharedFabricGlobalRoot)
+}
 
 enum SetupEnvironmentStatus {
     case ready
@@ -1032,9 +1081,13 @@ final class DashboardPreferences: ObservableObject {
     init(config: DashboardConfig, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let trimmedForcedGlobalRoot = config.initialGlobalRoot?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.forcedGlobalRootOverride = (trimmedForcedGlobalRoot?.isEmpty == false) ? trimmedForcedGlobalRoot : nil
+        self.forcedGlobalRootOverride = (trimmedForcedGlobalRoot?.isEmpty == false && !isFabricDemoPath(trimmedForcedGlobalRoot ?? ""))
+            ? standardizedDashboardPath(trimmedForcedGlobalRoot ?? "")
+            : nil
         let trimmedForcedVaultRoot = config.initialVaultRoot?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.forcedObsidianVaultRoot = (trimmedForcedVaultRoot?.isEmpty == false) ? trimmedForcedVaultRoot : nil
+        self.forcedObsidianVaultRoot = (trimmedForcedVaultRoot?.isEmpty == false && !isFabricDemoPath(trimmedForcedVaultRoot ?? ""))
+            ? standardizedDashboardPath(trimmedForcedVaultRoot ?? "")
+            : nil
         self.workspaceMode = .auto
         self.pinnedWorkspace = ""
         self.refreshInterval = 2.0
@@ -1065,12 +1118,22 @@ final class DashboardPreferences: ObservableObject {
             geminiChatScopeMode = mode
         }
         pinnedWorkspace = defaults.string(forKey: Keys.pinnedWorkspace) ?? ""
+        if isFabricDemoPath(pinnedWorkspace) {
+            workspaceMode = .auto
+            pinnedWorkspace = ""
+            surfaceMode = .preflight
+        }
         let storedRefresh = defaults.double(forKey: Keys.refreshInterval)
         refreshInterval = storedRefresh > 0 ? storedRefresh : 2.0
         globalRootOverride = defaults.string(forKey: Keys.globalRootOverride) ?? ""
+        if isFabricDemoPath(globalRootOverride) {
+            globalRootOverride = ""
+            surfaceMode = .preflight
+        }
         obsidianVaultRoot = defaults.string(forKey: Keys.obsidianVaultRoot) ?? ""
-        if obsidianVaultRoot.contains("/tmp/fabric-release-demo") {
+        if isFabricDemoPath(obsidianVaultRoot) {
             obsidianVaultRoot = ""
+            surfaceMode = .preflight
         }
         let storedOutputDir = defaults.string(forKey: Keys.obsidianChatHistoryOutputDir) ?? ""
         obsidianChatHistoryOutputDir = storedOutputDir.isEmpty ? defaultObsidianRawSourcesDir : storedOutputDir
@@ -1096,13 +1159,14 @@ final class DashboardPreferences: ObservableObject {
             showPinnedProjectsOnly = defaults.bool(forKey: Keys.showPinnedProjectsOnly)
         }
 
-        if let initialWorkspace = config.initialWorkspace, !initialWorkspace.isEmpty {
+        if let initialWorkspace = config.initialWorkspace, !initialWorkspace.isEmpty, !isFabricDemoPath(initialWorkspace) {
             workspaceMode = .pinned
-            pinnedWorkspace = initialWorkspace
+            pinnedWorkspace = standardizedDashboardPath(initialWorkspace)
         }
-        if pinnedWorkspace.contains("/tmp/fabric-release-demo") && config.initialWorkspace?.isEmpty != false {
+        if isFabricDemoPath(pinnedWorkspace) && config.initialWorkspace?.isEmpty != false {
             workspaceMode = .auto
             pinnedWorkspace = ""
+            surfaceMode = .preflight
         }
         if let forcedGlobalRootOverride {
             globalRootOverride = forcedGlobalRootOverride
@@ -1194,7 +1258,8 @@ final class DashboardPreferences: ObservableObject {
         if let forcedGlobalRootOverride {
             globalRootOverride = forcedGlobalRootOverride
         } else {
-            globalRootOverride = config.initialGlobalRoot ?? ""
+            let configured = config.initialGlobalRoot ?? ""
+            globalRootOverride = isFabricDemoPath(configured) ? "" : configured
         }
         if let forcedObsidianVaultRoot {
             obsidianVaultRoot = forcedObsidianVaultRoot
@@ -1225,7 +1290,10 @@ final class DashboardPreferences: ObservableObject {
             return forcedGlobalRootOverride
         }
         let trimmed = globalRootOverride.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? defaultGlobalRoot : trimmed
+        if !trimmed.isEmpty && !isFabricDemoPath(trimmed) && directoryExists(trimmed) {
+            return standardizedDashboardPath(trimmed)
+        }
+        return derivedGlobalRoot(forWorkspace: effectiveWorkspaceArgument)
     }
 
     var effectiveObsidianVaultRoot: String? {
@@ -2225,7 +2293,10 @@ struct DashboardSettingsView: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                 TextField(defaultGlobalRoot, text: $preferences.globalRootOverride)
                     .textFieldStyle(.roundedBorder)
-                Text("Leave blank to use the canonical shared fabric root.")
+                Text("Optional. Leave blank to derive the governance brain from the selected workspace when possible.")
+                    .font(.system(size: 11, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
+                Text("Resolved: \(preferences.effectiveGlobalRoot)")
                     .font(.system(size: 11, weight: .regular, design: .rounded))
                     .foregroundStyle(.secondary)
             }

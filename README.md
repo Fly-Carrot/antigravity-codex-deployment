@@ -62,6 +62,7 @@ At the system level, the complete Fabric architecture has four layers:
 - **Implementation body**: external skill, workflow, MCP, and subagent implementations live outside the governance root so the control plane stays small and portable.
 - **Knowledge base**: Obsidian holds raw sources, maintained wiki pages, semantic indexes, manifests, and graph data.
 - **Workbench**: `Fabric.app` makes setup, preflight harness checks, monitoring, wiki, source processing, graph navigation, and terminal-based maintenance visible in one place. It consumes artifacts; it is not the governance source of truth.
+- **Workspace-derived brain**: when a workspace contains `global-agent-fabric/`, Fabric automatically uses that governance brain unless the user provides a valid override.
 
 The architecture is deliberately inspired by several proven patterns, without claiming endorsement or affiliation:
 

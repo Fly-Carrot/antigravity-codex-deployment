@@ -649,6 +649,36 @@ def _directory_capability_group(
     )
 
 
+def _structure_check_group(global_root_path: Path) -> CapabilityGroup:
+    body_root = global_root_path.parent / "agent-fabric-implementation"
+    checks = [
+        {
+            "id": "governance-brain",
+            "name": "Governance Brain",
+            "enabled": (global_root_path / "STRUCTURE-CHECK.md").exists(),
+            "path": str(global_root_path / "STRUCTURE-CHECK.md"),
+            "notes": "Fixed harness root: rules, hooks, scripts, memory lanes, and registries.",
+        },
+        {
+            "id": "implementation-body",
+            "name": "Implementation Body",
+            "enabled": (body_root / "STRUCTURE-CHECK.md").exists(),
+            "path": str(body_root / "STRUCTURE-CHECK.md"),
+            "notes": "User-owned extension body: MCP, skills, workflows, and subagent adapters.",
+        },
+    ]
+    entries = [_capability_entry(item, "STRUCTURE-CHECK.md") for item in checks]
+    return CapabilityGroup(
+        kind="structure",
+        title="Structure Checks",
+        configured_count=sum(1 for item in entries if item.status == "enabled"),
+        enabled_count=sum(1 for item in entries if item.status == "enabled"),
+        missing_count=sum(1 for item in entries if item.status != "enabled"),
+        source_path=str(global_root_path),
+        entries=entries,
+    )
+
+
 def _resolve_capability_groups(
     global_root_path: Path,
     alerts: list[str],
@@ -665,6 +695,7 @@ def _resolve_capability_groups(
     workflow_items = _read_registry_list(workflows_path, "sources", alerts)
 
     return [
+        _structure_check_group(global_root_path),
         _capability_group(kind="mcp", title="MCP Servers", source_path=mcp_path, items=mcp_items, source="mcp/servers.yaml"),
         _capability_group(kind="skills", title="Skill Registries", source_path=skills_path, items=skill_items, source="skills/sources.yaml"),
         _capability_group(kind="workflows", title="Workflow Registries", source_path=workflows_path, items=workflow_items, source="workflows/sources.yaml"),
