@@ -6821,7 +6821,10 @@ LEGEND.forEach(item => {
 
     private func capabilityMatrixCard(snapshot: DashboardSnapshot) -> some View {
         DashboardCard(title: "Extension Body", symbol: "shippingbox") {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 12) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 260), spacing: 12, alignment: .top)],
+                spacing: 12
+            ) {
                 ForEach(snapshot.capabilityGroups) { group in
                     capabilityGroupTile(group)
                 }
@@ -6858,24 +6861,27 @@ LEGEND.forEach(item => {
                     .padding(.vertical, 6)
                     .background(Capsule(style: .continuous).fill(Color.white.opacity(0.07)))
             }
-            if group.entries.isEmpty {
-                Text(group.missingCount > 0 ? "Registry path is not present yet." : "No entries configured yet.")
-                    .font(.system(size: 10, weight: .regular, design: .rounded))
-                    .foregroundStyle(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 7) {
-                    ForEach(group.entries.prefix(5)) { entry in
-                        capabilityEntryRow(entry)
+
+            ScrollView(.vertical, showsIndicators: true) {
+                if group.entries.isEmpty {
+                    Text(group.missingCount > 0 ? "Registry path is not present yet." : "No entries configured yet.")
+                        .font(.system(size: 10, weight: .regular, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    VStack(alignment: .leading, spacing: 7) {
+                        ForEach(group.entries) { entry in
+                            capabilityEntryRow(entry)
+                        }
                     }
-                    if group.entries.count > 5 {
-                        Text("+ \(group.entries.count - 5) more")
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .padding(12)
+        .frame(minHeight: 184, maxHeight: 184, alignment: .topLeading)
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.white.opacity(0.045))
