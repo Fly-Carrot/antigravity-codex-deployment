@@ -9802,6 +9802,10 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(docURL)
     }
 
+    @objc func quitFabric(_ sender: Any?) {
+        NSApp.terminate(sender)
+    }
+
     private func activeController() -> FloatingDashboardController? {
         if let keyWindow = NSApp.keyWindow {
             return controllers.first(where: { $0.window === keyWindow })
@@ -10026,7 +10030,7 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         menu.addItem(menuAction("Open Terminal Panel", action: #selector(showGeminiPanel(_:)), enabled: activeController() != nil))
         menu.addItem(.separator())
 
-        menu.addItem(menuAction("Quit Fabric", action: #selector(NSApplication.terminate(_:))))
+        menu.addItem(menuAction("Quit Fabric", action: #selector(quitFabric(_:))))
 
         statusItem.menu = menu
     }
@@ -10055,9 +10059,7 @@ final class DashboardAppController: NSObject, NSApplicationDelegate {
         appMenu.addItem(hideOthers)
         appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "Quit Fabric", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        quitItem.keyEquivalentModifierMask = [.command]
-        appMenu.addItem(quitItem)
+        appMenu.addItem(targetedItem("Quit Fabric", action: #selector(quitFabric(_:)), key: "q"))
 
         let fileMenuItem = NSMenuItem()
         mainMenu.addItem(fileMenuItem)
